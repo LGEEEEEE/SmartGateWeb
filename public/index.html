@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Gate Pro</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="login-screen" class="screen">
+        <div class="card">
+            <h1>🔐 Acesso Seguro</h1>
+            <p>Digite sua senha mestre</p>
+            <input type="password" id="passwordInput" placeholder="Senha">
+            <button onclick="fazerLogin()" id="btnLogin">ENTRAR</button>
+            <p id="loginError" class="error-msg"></p>
+        </div>
+    </div>
+
+    <div id="app-screen" class="screen hidden">
+        <div class="top-bar">
+            <span>Smart Gate 🏠</span>
+            <button onclick="fazerLogout()" class="btn-logout">Sair</button>
+        </div>
+
+        <div class="status-container">
+            <div id="statusIndicator" class="status-circle"></div>
+            <h2 id="statusText">Verificando...</h2>
+        </div>
+
+        <div class="control-area">
+            <button id="btnOpen" onclick="abrirPortao()">
+                <div class="icon-power">⚡</div>
+            </button>
+            <p>Toque para acionar</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
