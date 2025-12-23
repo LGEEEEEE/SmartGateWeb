@@ -4,14 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart Gate Pro</title>
-    
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#000000">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Smart Gate">
-    <link rel="apple-touch-icon" href="icon-192.png">
-
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -34,19 +26,14 @@
 
         <div class="status-container">
             <div id="statusIndicator" class="status-circle"></div>
-            <h2 id="statusText">Conectando...</h2>
+            <h2 id="statusText">Verificando...</h2>
         </div>
 
         <div class="control-area">
-            <button id="btnOpen" onclick="interagirPortao()">
-                <div class="icon-power" id="iconBtn">⚡</div>
+            <button id="btnOpen" onclick="abrirPortao()">
+                <div class="icon-power">⚡</div>
             </button>
-            
-            <div id="progressContainer" class="progress-container hidden">
-                <div id="progressBar" class="progress-bar"></div>
-            </div>
-            
-            <p id="btnLabel">Carregando...</p>
+            <p>Toque para acionar</p>
         </div>
     </div>
 
