@@ -58,7 +58,7 @@ client.on('message', (topic, message) => {
     }
 });
 
-// --- FUNÇÃO DE NOTIFICAÇÃO (NTFY) ---
+// --- FUNÇÃO DE NOTIFICAÇÃO (CORRIGIDA - FORMATO TEXTO) ---
 function verificarENotificar(estado) {
     // Filtra estados de transição (só notifica se abriu ou fechou totalmente)
     if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") {
@@ -87,17 +87,22 @@ function verificarENotificar(estado) {
     // Atualiza a memória
     ultimoEstadoNotificado = estado;
 
-    // Dispara a requisição para o ntfy.sh
+    // Dispara a requisição para o ntfy.sh usando HEADERS
     if (NTFY_TOPIC) {
         console.log(`🔔 Enviando notificação: ${titulo}`);
-        axios.post(`https://ntfy.sh/${NTFY_TOPIC}`, {
-            topic: NTFY_TOPIC,
-            title: titulo,
-            message: mensagem,
-            priority: 4, // 4 = High Priority (faz barulho/vibra)
-            tags: tags,
-            click: "https://smartgateweb.onrender.com" // Abre seu app ao clicar
-        })
+        
+        axios.post(`https://ntfy.sh/${NTFY_TOPIC}`, 
+            mensagem, // Corpo simples (apenas texto)
+            {
+                headers: {
+                    'Title': titulo,
+                    'Priority': 'high', // Faz vibrar/tocar
+                    'Tags': tags.join(','),
+                    'Click': "https://smartgateweb.onrender.com", // Abre seu site
+                    'Content-Type': 'text/plain; charset=utf-8'
+                }
+            }
+        )
         .catch(err => console.error("Erro ao enviar notificação ntfy:", err.message));
     }
 }
