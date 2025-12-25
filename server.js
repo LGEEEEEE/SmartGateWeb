@@ -28,6 +28,10 @@ let ultimoEstadoNotificado = "";
 let activeTokens = [];
 let sseClients = [];
 
+// Memória de QUEM abriu
+let ultimoComandoOrigem = null; 
+let timeoutComando = null;
+
 // --- CONEXÃO MQTT ---
 console.log("📡 Conectando ao Broker MQTT...");
 const client = mqtt.connect(MQTT_URL, {
@@ -39,101 +43,121 @@ const client = mqtt.connect(MQTT_URL, {
 
 client.on('connect', () => {
     console.log("✅ MQTT Conectado com Sucesso!");
-    client.subscribe(TOPIC_STATUS);
+    // AGORA ASSINAMOS OS DOIS TÓPICOS: COMANDO E STATUS
+    client.subscribe([TOPIC_STATUS, TOPIC_COMMAND], (err) => {
+        if (!err) console.log("👂 Ouvindo comandos e status...");
+    });
 });
 
-// --- RECEBIMENTO DE MENSAGENS E NOTIFICAÇÃO ---
+// --- RECEBIMENTO DE MENSAGENS ---
 client.on('message', (topic, message) => {
-    if (topic === TOPIC_STATUS) {
-        const msg = message.toString();
+    const msg = message.toString();
+
+    // 1. SE FOR COMANDO (Vindo do App ou Site)
+    if (topic === TOPIC_COMMAND) {
+        // O App manda: "ABRIR_PORTAO_AGORA|NomeUser|ModeloCelular"
+        const partes = msg.split('|');
         
-        // Atualiza estado global
+        // Verifica se o payload tem o formato certo (3 partes)
+        if (partes.length >= 3) {
+            const usuario = partes[1]; // Ex: LG Admin
+            const dispositivo = partes[2]; // Ex: iPhone 15 ou Android
+            
+            // Salva na memória quem mandou abrir
+            ultimoComandoOrigem = `${usuario} via ${dispositivo}`;
+            console.log(`👤 Comando recebido de: ${ultimoComandoOrigem}`);
+
+            // Reseta o timeout (esquece quem foi depois de 40s)
+            if (timeoutComando) clearTimeout(timeoutComando);
+            timeoutComando = setTimeout(() => {
+                ultimoComandoOrigem = null;
+            }, 40000);
+        }
+    }
+
+    // 2. SE FOR STATUS (Vindo do ESP32/Portão)
+    if (topic === TOPIC_STATUS) {
         ultimoEstadoConhecido = msg;
 
-        // 1. Atualiza o Frontend em tempo real (quem está com o site aberto)
+        // Atualiza Frontend (SSE)
         sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
 
-        // 2. Verifica se precisa mandar Notificação Push
+        // Verifica Notificação Push
         verificarENotificar(msg);
     }
 });
 
-// --- FUNÇÃO DE NOTIFICAÇÃO (VERSÃO FINAL CORRIGIDA) ---
+// --- FUNÇÃO DE NOTIFICAÇÃO ---
 function verificarENotificar(estado) {
-    // 1. Filtra estados irrelevantes
-    if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") {
-        return;
-    }
-
-    // 2. Evita spam (não manda se for igual ao último enviado)
-    if (estado === ultimoEstadoNotificado) {
-        return;
-    }
+    if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") return;
+    if (estado === ultimoEstadoNotificado) return;
 
     let titulo = "";
     let mensagem = "";
     let tags = [];
 
+    // LÓGICA DE ORIGEM
+    let origemTexto = "";
+    
     if (estado === "ESTADO_REAL_ABERTO") {
         titulo = "Portão Aberto ⚠️";
-        mensagem = "Atenção: O portão da garagem acabou de abrir.";
+        
+        // Se temos registro de quem mandou o comando
+        if (ultimoComandoOrigem) {
+            origemTexto = `\n📱 Acionado por: ${ultimoComandoOrigem}`;
+            // Limpa a memória
+            ultimoComandoOrigem = null;
+            if (timeoutComando) clearTimeout(timeoutComando);
+        } else {
+            // Se não capturamos comando no MQTT, foi controle físico
+            origemTexto = "\n🎮 Acionado por: Controle Remoto";
+        }
+
+        mensagem = `O portão acabou de abrir.${origemTexto}`;
         tags = ["warning", "door"]; 
+
     } else {
         titulo = "Portão Fechado 🔒";
-        mensagem = "Seguro: O portão foi fechado com sucesso.";
+        mensagem = "O portão foi fechado.";
         tags = ["white_check_mark", "lock"];
     }
 
-    // Atualiza a memória para não repetir
     ultimoEstadoNotificado = estado;
 
-    // 3. Envio seguro via JSON para o NTFY
+    // ENVIO PARA O NTFY
     if (NTFY_TOPIC) {
-        console.log(`🔔 Enviando notificação para o tópico: ${NTFY_TOPIC}`);
+        console.log(`🔔 Notificando: ${titulo}`);
         
-        // POST para a raiz do ntfy.sh enviando o tópico no corpo
-        // Isso garante que a formatação (título, emojis) funcione corretamente
         axios.post('https://ntfy.sh/', {
             topic: NTFY_TOPIC,
             title: titulo,
             message: mensagem,
-            priority: 3, // Alta prioridade
+            priority: 3, 
             tags: tags,
-            click: "https://smartgateweb.onrender.com" // <--- O PULO DO GATO AQUI
+            click: "https://smartgateweb.onrender.com"
         })
-        .then(() => console.log("✅ Notificação enviada com sucesso!"))
         .catch(err => {
-            console.error("❌ Erro no envio da notificação:");
-            if (err.response) {
-                console.error(err.response.data);
-            } else {
-                console.error(err.message);
-            }
+            console.error("❌ Erro ntfy:");
+            if(err.response) console.error(err.response.data);
+            else console.error(err.message);
         });
     }
 }
 
-// --- ROTAS DO SERVIDOR ---
+// --- ROTAS HTTP (SITE/DASHBOARD) ---
+// Mantido para compatibilidade com o site web
 
-// Rota SSE (Server-Sent Events) para o Frontend
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
-    
     const id = Date.now();
     sseClients.push({ id, res });
-    
-    // Envia o estado atual imediatamente ao conectar
     res.write(`data: ${ultimoEstadoConhecido}\n\n`);
-
-    req.on('close', () => {
-        sseClients = sseClients.filter(c => c.id !== id);
-    });
+    req.on('close', () => sseClients = sseClients.filter(c => c.id !== id));
 });
 
-// Login
 app.post('/api/login', (req, res) => {
     const { password } = req.body;
     if (password === APP_PASSWORD) {
@@ -145,26 +169,31 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-// Acionar Portão
+// Se acionar pelo SITE (via HTTP), simulamos o payload igual ao do App
 app.post('/api/acionar', (req, res) => {
     const token = req.headers['authorization'];
-    if (!activeTokens.includes(token)) {
-        return res.status(403).json({ error: "Sessão Expirada." });
-    }
+    if (!activeTokens.includes(token)) return res.status(403).json({ error: "Sessão Expirada." });
     
-    // Envia comando para o ESP32 via MQTT
-    const payload = `ABRIR_PORTAO_AGORA|WebUser|SessaoAtiva`;
+    // Identifica se é navegador
+    const userAgent = req.headers['user-agent'] || "Web";
+    let device = "Navegador Web";
+    if (userAgent.includes("Android")) device = "Android Web";
+    else if (userAgent.includes("iPhone")) device = "iPhone Web";
+    else if (userAgent.includes("Windows")) device = "PC Windows";
+
+    // Monta o payload igualzinho ao do seu App React Native
+    // Assim o próprio listener MQTT ali em cima vai capturar e processar
+    const payload = `ABRIR_PORTAO_AGORA|WebUser|${device}`;
+    
     client.publish(TOPIC_COMMAND, payload);
     
     res.json({ success: true });
 });
 
-// Logout
 app.post('/api/logout', (req, res) => {
     const token = req.headers['authorization'];
     activeTokens = activeTokens.filter(t => t !== token);
     res.json({ success: true });
 });
 
-// --- INICIALIZAÇÃO ---
-app.listen(PORT, () => console.log(`🚀 Servidor Smart Gate rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Servidor Smart Gate na porta ${PORT}`));
