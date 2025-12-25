@@ -58,14 +58,14 @@ client.on('message', (topic, message) => {
     }
 });
 
-// --- FUNÇÃO DE NOTIFICAÇÃO (CORRIGIDA - FORMATO TEXTO) ---
+// --- FUNÇÃO DE NOTIFICAÇÃO (VERSÃO FINAL CORRIGIDA) ---
 function verificarENotificar(estado) {
-    // Filtra estados de transição (só notifica se abriu ou fechou totalmente)
+    // 1. Filtra estados irrelevantes
     if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") {
         return;
     }
 
-    // Evita notificações repetidas (spam)
+    // 2. Evita spam (não manda se for igual ao último enviado)
     if (estado === ultimoEstadoNotificado) {
         return;
     }
@@ -84,26 +84,32 @@ function verificarENotificar(estado) {
         tags = ["white_check_mark", "lock"];
     }
 
-    // Atualiza a memória
+    // Atualiza a memória para não repetir
     ultimoEstadoNotificado = estado;
 
-    // Dispara a requisição para o ntfy.sh usando HEADERS
+    // 3. Envio seguro via JSON para o NTFY
     if (NTFY_TOPIC) {
-        console.log(`🔔 Enviando notificação: ${titulo}`);
+        console.log(`🔔 Enviando notificação para o tópico: ${NTFY_TOPIC}`);
         
-        axios.post(`https://ntfy.sh/${NTFY_TOPIC}`, 
-            mensagem, // Corpo simples (apenas texto)
-            {
-                headers: {
-                    'Title': titulo,
-                    'Priority': 'high', // Faz vibrar/tocar
-                    'Tags': tags.join(','),
-                    'Click': "https://smartgateweb.onrender.com", // Abre seu site
-                    'Content-Type': 'text/plain; charset=utf-8'
-                }
+        // POST para a raiz do ntfy.sh enviando o tópico no corpo
+        // Isso garante que a formatação (título, emojis) funcione corretamente
+        axios.post('https://ntfy.sh/', {
+            topic: NTFY_TOPIC,
+            title: titulo,
+            message: mensagem,
+            priority: 4, // Alta prioridade
+            tags: tags,
+            click: "https://smartgateweb.onrender.com" // <--- O PULO DO GATO AQUI
+        })
+        .then(() => console.log("✅ Notificação enviada com sucesso!"))
+        .catch(err => {
+            console.error("❌ Erro no envio da notificação:");
+            if (err.response) {
+                console.error(err.response.data);
+            } else {
+                console.error(err.message);
             }
-        )
-        .catch(err => console.error("Erro ao enviar notificação ntfy:", err.message));
+        });
     }
 }
 
