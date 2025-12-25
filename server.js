@@ -97,7 +97,7 @@ function verificarENotificar(estado) {
             topic: NTFY_TOPIC,
             title: titulo,
             message: mensagem,
-            priority: 4, // Alta prioridade
+            priority: 3, // Alta prioridade
             tags: tags,
             click: "https://smartgateweb.onrender.com" // <--- O PULO DO GATO AQUI
         })
