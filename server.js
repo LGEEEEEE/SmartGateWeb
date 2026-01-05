@@ -121,7 +121,38 @@ function verificarENotificar(estado) {
     }
 }
 
-// --- ROTAS HTTP (SITE/DASHBOARD) ---
+// --- FUNÇÃO INTELIGENTE PARA DESCOBRIR O MODELO DO CELULAR ---
+function identificarDispositivo(userAgent) {
+    // 1. iPhone (Apple oculta o modelo exato)
+    if (/iPhone/.test(userAgent)) {
+        return "iPhone"; 
+    }
+
+    // 2. Android (Tenta extrair o modelo ex: SM-M356B)
+    if (/Android/.test(userAgent)) {
+        // Procura texto entre ponto-e-vírgula e a palavra Build/
+        const match = userAgent.match(/Android[^;]*;\s*([^;]+?)\s*(?:Build|\))/);
+        
+        if (match && match[1]) {
+            let modelo = match[1].trim();
+            // Limpeza extra caso pegue idioma (ex: pt-br)
+            if (modelo.length < 5 && userAgent.includes(modelo)) {
+                 const match2 = userAgent.match(/;\s([A-Za-z0-9\s\-]+)\sBuild/);
+                 if(match2) modelo = match2[1].trim();
+            }
+            return `Android (${modelo})`;
+        }
+        return "Android Genérico";
+    }
+
+    // 3. Windows
+    if (/Windows/.test(userAgent)) return "PC Windows";
+
+    return "Navegador Web";
+}
+
+// --- ROTAS HTTP ---
+
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -144,39 +175,37 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-// --- ROTA DE ACIONAR (Com verificação de Horário) ---
 app.post('/api/acionar', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeTokens.includes(token)) return res.status(403).json({ error: "Sessão Expirada." });
 
-    const { confirmed } = req.body; // Recebe flag de confirmação do frontend
+    const { confirmed, deviceName } = req.body; // Aceita deviceName se o front mandar
 
-    // 1. Pega hora oficial de Brasília (independente de onde o server está hospedado)
+    // 1. Verifica Horário Crítico (Brasília)
     const dataBrasilia = new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"});
     const horaAtual = new Date(dataBrasilia).getHours();
-
-    // 2. Define Horário Crítico (23h às 05h)
+    
+    // Regra: Das 23h até 05h precisa de confirmação
     const isHorarioCritico = horaAtual >= 23 || horaAtual < 5;
 
-    // 3. Se for horário crítico E NÃO tiver confirmação, pede confirmação
     if (isHorarioCritico && !confirmed) {
         return res.json({ 
             success: false, 
             requiresConfirmation: true, 
-            message: "⚠️ Horário Crítico (23h-05h)! Tem certeza que deseja abrir?" 
+            message: "⚠️ Atenção: Horário de Segurança (23h-05h).\nDeseja realmente abrir o portão?" 
         });
     }
 
-    // Identifica dispositivo
-    const userAgent = req.headers['user-agent'] || "Web";
-    let device = "Navegador Web";
-    if (userAgent.includes("Android")) device = "Android Web";
-    else if (userAgent.includes("iPhone")) device = "iPhone Web";
-    else if (userAgent.includes("Windows")) device = "PC Windows";
+    // 2. Identifica o Dispositivo
+    const userAgent = req.headers['user-agent'] || "";
+    // Se o frontend mandou um nome personalizado, usa ele. Se não, tenta descobrir.
+    const device = deviceName || identificarDispositivo(userAgent);
 
+    // 3. Publica no MQTT
     const payload = `ABRIR_PORTAO_AGORA|WebUser|${device}`;
-    
     client.publish(TOPIC_COMMAND, payload);
+    
+    console.log(`📱 Acionamento via Site: ${device} (Hora: ${horaAtual}h)`);
     
     res.json({ success: true });
 });
