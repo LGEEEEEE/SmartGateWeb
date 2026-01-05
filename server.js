@@ -43,7 +43,6 @@ const client = mqtt.connect(MQTT_URL, {
 
 client.on('connect', () => {
     console.log("✅ MQTT Conectado com Sucesso!");
-    // AGORA ASSINAMOS OS DOIS TÓPICOS: COMANDO E STATUS
     client.subscribe([TOPIC_STATUS, TOPIC_COMMAND], (err) => {
         if (!err) console.log("👂 Ouvindo comandos e status...");
     });
@@ -55,19 +54,14 @@ client.on('message', (topic, message) => {
 
     // 1. SE FOR COMANDO (Vindo do App ou Site)
     if (topic === TOPIC_COMMAND) {
-        // O App manda: "ABRIR_PORTAO_AGORA|NomeUser|ModeloCelular"
         const partes = msg.split('|');
-        
-        // Verifica se o payload tem o formato certo (3 partes)
         if (partes.length >= 3) {
-            const usuario = partes[1]; // Ex: LG Admin
-            const dispositivo = partes[2]; // Ex: iPhone 15 ou Android
+            const usuario = partes[1]; 
+            const dispositivo = partes[2];
             
-            // Salva na memória quem mandou abrir
             ultimoComandoOrigem = `${usuario} via ${dispositivo}`;
             console.log(`👤 Comando recebido de: ${ultimoComandoOrigem}`);
 
-            // Reseta o timeout (esquece quem foi depois de 40s)
             if (timeoutComando) clearTimeout(timeoutComando);
             timeoutComando = setTimeout(() => {
                 ultimoComandoOrigem = null;
@@ -78,11 +72,7 @@ client.on('message', (topic, message) => {
     // 2. SE FOR STATUS (Vindo do ESP32/Portão)
     if (topic === TOPIC_STATUS) {
         ultimoEstadoConhecido = msg;
-
-        // Atualiza Frontend (SSE)
         sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
-
-        // Verifica Notificação Push
         verificarENotificar(msg);
     }
 });
@@ -95,27 +85,19 @@ function verificarENotificar(estado) {
     let titulo = "";
     let mensagem = "";
     let tags = [];
-
-    // LÓGICA DE ORIGEM
     let origemTexto = "";
     
     if (estado === "ESTADO_REAL_ABERTO") {
         titulo = "Portão Aberto ⚠️";
-        
-        // Se temos registro de quem mandou o comando
         if (ultimoComandoOrigem) {
             origemTexto = `\n📱 Acionado por: ${ultimoComandoOrigem}`;
-            // Limpa a memória
             ultimoComandoOrigem = null;
             if (timeoutComando) clearTimeout(timeoutComando);
         } else {
-            // Se não capturamos comando no MQTT, foi controle físico
             origemTexto = "\n🎮 Acionado por: Controle Remoto";
         }
-
         mensagem = `O portão acabou de abrir.${origemTexto}`;
         tags = ["warning", "door"]; 
-
     } else {
         titulo = "Portão Fechado 🔒";
         mensagem = "O portão foi fechado.";
@@ -124,10 +106,8 @@ function verificarENotificar(estado) {
 
     ultimoEstadoNotificado = estado;
 
-    // ENVIO PARA O NTFY
     if (NTFY_TOPIC) {
         console.log(`🔔 Notificando: ${titulo}`);
-        
         axios.post('https://ntfy.sh/', {
             topic: NTFY_TOPIC,
             title: titulo,
@@ -135,18 +115,13 @@ function verificarENotificar(estado) {
             priority: 3, 
             tags: tags,
             click: "https://smartgateweb.onrender.com"
-        })
-        .catch(err => {
-            console.error("❌ Erro ntfy:");
-            if(err.response) console.error(err.response.data);
-            else console.error(err.message);
+        }).catch(err => {
+            console.error("❌ Erro ntfy:", err.message);
         });
     }
 }
 
 // --- ROTAS HTTP (SITE/DASHBOARD) ---
-// Mantido para compatibilidade com o site web
-
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -169,20 +144,36 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-// Se acionar pelo SITE (via HTTP), simulamos o payload igual ao do App
+// --- ROTA DE ACIONAR (Com verificação de Horário) ---
 app.post('/api/acionar', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeTokens.includes(token)) return res.status(403).json({ error: "Sessão Expirada." });
-    
-    // Identifica se é navegador
+
+    const { confirmed } = req.body; // Recebe flag de confirmação do frontend
+
+    // 1. Pega hora oficial de Brasília (independente de onde o server está hospedado)
+    const dataBrasilia = new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"});
+    const horaAtual = new Date(dataBrasilia).getHours();
+
+    // 2. Define Horário Crítico (23h às 05h)
+    const isHorarioCritico = horaAtual >= 23 || horaAtual < 5;
+
+    // 3. Se for horário crítico E NÃO tiver confirmação, pede confirmação
+    if (isHorarioCritico && !confirmed) {
+        return res.json({ 
+            success: false, 
+            requiresConfirmation: true, 
+            message: "⚠️ Horário Crítico (23h-05h)! Tem certeza que deseja abrir?" 
+        });
+    }
+
+    // Identifica dispositivo
     const userAgent = req.headers['user-agent'] || "Web";
     let device = "Navegador Web";
     if (userAgent.includes("Android")) device = "Android Web";
     else if (userAgent.includes("iPhone")) device = "iPhone Web";
     else if (userAgent.includes("Windows")) device = "PC Windows";
 
-    // Monta o payload igualzinho ao do seu App React Native
-    // Assim o próprio listener MQTT ali em cima vai capturar e processar
     const payload = `ABRIR_PORTAO_AGORA|WebUser|${device}`;
     
     client.publish(TOPIC_COMMAND, payload);
