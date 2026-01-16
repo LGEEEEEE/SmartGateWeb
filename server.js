@@ -199,5 +199,3 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`🚀 Servidor Smart Gate na porta ${PORT}`));
-
-https://smartgateweb.onrender.com
