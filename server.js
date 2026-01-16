@@ -32,6 +32,11 @@ let sseClients = [];
 let ultimoComandoOrigem = null; 
 let timeoutComando = null;
 
+// --- NOVAS VARIÁVEIS DE PROTEÇÃO (ANTI-SPAM) ---
+let ultimoTimestampMQTT = 0;          // Para filtrar ruído do sensor
+let ultimaNotificacaoTimestamp = 0;   // Para não estourar a cota do ntfy
+const DELAY_NOTIFICACAO = 10000;      // 10 segundos entre notificações no celular
+
 // --- CONEXÃO MQTT ---
 console.log("📡 Conectando ao Broker MQTT...");
 const client = mqtt.connect(MQTT_URL, {
@@ -43,7 +48,6 @@ const client = mqtt.connect(MQTT_URL, {
 
 client.on('connect', () => {
     console.log("✅ MQTT Conectado com Sucesso!");
-    // AGORA ASSINAMOS OS DOIS TÓPICOS: COMANDO E STATUS
     client.subscribe([TOPIC_STATUS, TOPIC_COMMAND], (err) => {
         if (!err) console.log("👂 Ouvindo comandos e status...");
     });
@@ -55,19 +59,15 @@ client.on('message', (topic, message) => {
 
     // 1. SE FOR COMANDO (Vindo do App ou Site)
     if (topic === TOPIC_COMMAND) {
-        // O App manda: "ABRIR_PORTAO_AGORA|NomeUser|ModeloCelular"
         const partes = msg.split('|');
         
-        // Verifica se o payload tem o formato certo (3 partes)
         if (partes.length >= 3) {
             const usuario = partes[1]; // Ex: LG Admin
             const dispositivo = partes[2]; // Ex: iPhone 15 ou Android
             
-            // Salva na memória quem mandou abrir
             ultimoComandoOrigem = `${usuario} via ${dispositivo}`;
             console.log(`👤 Comando recebido de: ${ultimoComandoOrigem}`);
 
-            // Reseta o timeout (esquece quem foi depois de 40s)
             if (timeoutComando) clearTimeout(timeoutComando);
             timeoutComando = setTimeout(() => {
                 ultimoComandoOrigem = null;
@@ -77,6 +77,20 @@ client.on('message', (topic, message) => {
 
     // 2. SE FOR STATUS (Vindo do ESP32/Portão)
     if (topic === TOPIC_STATUS) {
+        
+        // --- PROTEÇÃO 1: DEBOUNCE (Filtro de Ruído do Sensor) ---
+        const agora = Date.now();
+        const diferencaTempo = agora - ultimoTimestampMQTT;
+
+        // Se a mensagem chegou em menos de 0.5s da anterior, é ruído/bouncing
+        if (diferencaTempo < 500) {
+            // console.log(`🚫 Ruído do sensor ignorado (${diferencaTempo}ms)`);
+            return; 
+        }
+        
+        ultimoTimestampMQTT = agora;
+        // --------------------------------------------------------
+
         ultimoEstadoConhecido = msg;
 
         // Atualiza Frontend (SSE)
@@ -89,28 +103,34 @@ client.on('message', (topic, message) => {
 
 // --- FUNÇÃO DE NOTIFICAÇÃO ---
 function verificarENotificar(estado) {
+    // Valida se o estado é real
     if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") return;
+    
+    // Se o estado é o mesmo que já avisamos, ignora
     if (estado === ultimoEstadoNotificado) return;
+
+    // --- PROTEÇÃO 2: RATE LIMIT (Cota do Ntfy) ---
+    const agora = Date.now();
+    if (agora - ultimaNotificacaoTimestamp < DELAY_NOTIFICACAO) {
+        console.log("⏳ Notificação bloqueada para evitar spam (aguardando tempo mínimo)");
+        return; 
+    }
+    // ---------------------------------------------
 
     let titulo = "";
     let mensagem = "";
     let tags = [];
-
-    // LÓGICA DE ORIGEM
     let origemTexto = "";
     
     if (estado === "ESTADO_REAL_ABERTO") {
         titulo = "Portão Aberto ⚠️";
         
-        // Se temos registro de quem mandou o comando
         if (ultimoComandoOrigem) {
             origemTexto = `\n📱 Acionado por: ${ultimoComandoOrigem}`;
-            // Limpa a memória
             ultimoComandoOrigem = null;
             if (timeoutComando) clearTimeout(timeoutComando);
         } else {
-            // Se não capturamos comando no MQTT, foi controle físico
-            origemTexto = "\n🎮 Acionado por: Controle Remoto";
+            origemTexto = "\n🎮 Acionado por: Controle Remoto/Manual";
         }
 
         mensagem = `O portão acabou de abrir.${origemTexto}`;
@@ -122,7 +142,9 @@ function verificarENotificar(estado) {
         tags = ["white_check_mark", "lock"];
     }
 
+    // Atualiza controles ANTES de enviar para garantir
     ultimoEstadoNotificado = estado;
+    ultimaNotificacaoTimestamp = agora;
 
     // ENVIO PARA O NTFY
     if (NTFY_TOPIC) {
@@ -145,8 +167,6 @@ function verificarENotificar(estado) {
 }
 
 // --- ROTAS HTTP (SITE/DASHBOARD) ---
-// Mantido para compatibilidade com o site web
-
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -169,20 +189,16 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-// Se acionar pelo SITE (via HTTP), simulamos o payload igual ao do App
 app.post('/api/acionar', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeTokens.includes(token)) return res.status(403).json({ error: "Sessão Expirada." });
     
-    // Identifica se é navegador
     const userAgent = req.headers['user-agent'] || "Web";
     let device = "Navegador Web";
     if (userAgent.includes("Android")) device = "Android Web";
     else if (userAgent.includes("iPhone")) device = "iPhone Web";
     else if (userAgent.includes("Windows")) device = "PC Windows";
 
-    // Monta o payload igualzinho ao do seu App React Native
-    // Assim o próprio listener MQTT ali em cima vai capturar e processar
     const payload = `ABRIR_PORTAO_AGORA|WebUser|${device}`;
     
     client.publish(TOPIC_COMMAND, payload);
