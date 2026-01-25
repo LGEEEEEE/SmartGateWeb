@@ -43,7 +43,6 @@ const client = mqtt.connect(MQTT_URL, {
 
 client.on('connect', () => {
     console.log("✅ MQTT Conectado com Sucesso!");
-    // AGORA ASSINAMOS OS DOIS TÓPICOS: COMANDO E STATUS
     client.subscribe([TOPIC_STATUS, TOPIC_COMMAND], (err) => {
         if (!err) console.log("👂 Ouvindo comandos e status...");
     });
@@ -58,16 +57,13 @@ client.on('message', (topic, message) => {
         // O App manda: "ABRIR_PORTAO_AGORA|NomeUser|ModeloCelular"
         const partes = msg.split('|');
         
-        // Verifica se o payload tem o formato certo (3 partes)
         if (partes.length >= 3) {
-            const usuario = partes[1]; // Ex: LG Admin
-            const dispositivo = partes[2]; // Ex: iPhone 15 ou Android
+            const usuario = partes[1]; 
+            const dispositivo = partes[2]; 
             
-            // Salva na memória quem mandou abrir
             ultimoComandoOrigem = `${usuario} via ${dispositivo}`;
             console.log(`👤 Comando recebido de: ${ultimoComandoOrigem}`);
 
-            // Reseta o timeout (esquece quem foi depois de 40s)
             if (timeoutComando) clearTimeout(timeoutComando);
             timeoutComando = setTimeout(() => {
                 ultimoComandoOrigem = null;
@@ -95,21 +91,16 @@ function verificarENotificar(estado) {
     let titulo = "";
     let mensagem = "";
     let tags = [];
-
-    // LÓGICA DE ORIGEM
     let origemTexto = "";
     
     if (estado === "ESTADO_REAL_ABERTO") {
         titulo = "Portão Aberto ⚠️";
         
-        // Se temos registro de quem mandou o comando
         if (ultimoComandoOrigem) {
             origemTexto = `\n📱 Acionado por: ${ultimoComandoOrigem}`;
-            // Limpa a memória
             ultimoComandoOrigem = null;
             if (timeoutComando) clearTimeout(timeoutComando);
         } else {
-            // Se não capturamos comando no MQTT, foi controle físico
             origemTexto = "\n🎮 Acionado por: Controle Remoto";
         }
 
@@ -124,10 +115,8 @@ function verificarENotificar(estado) {
 
     ultimoEstadoNotificado = estado;
 
-    // ENVIO PARA O NTFY
     if (NTFY_TOPIC) {
         console.log(`🔔 Notificando: ${titulo}`);
-        
         axios.post('https://ntfy.sh/', {
             topic: NTFY_TOPIC,
             title: titulo,
@@ -137,15 +126,12 @@ function verificarENotificar(estado) {
             click: "https://smartgateweb.onrender.com"
         })
         .catch(err => {
-            console.error("❌ Erro ntfy:");
-            if(err.response) console.error(err.response.data);
-            else console.error(err.message);
+            console.error("❌ Erro ntfy:", err.message);
         });
     }
 }
 
-// --- ROTAS HTTP (SITE/DASHBOARD) ---
-// Mantido para compatibilidade com o site web
+// --- ROTAS HTTP ---
 
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -169,25 +155,36 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-// Se acionar pelo SITE (via HTTP), simulamos o payload igual ao do App
 app.post('/api/acionar', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeTokens.includes(token)) return res.status(403).json({ error: "Sessão Expirada." });
     
-    // Identifica se é navegador
     const userAgent = req.headers['user-agent'] || "Web";
     let device = "Navegador Web";
     if (userAgent.includes("Android")) device = "Android Web";
     else if (userAgent.includes("iPhone")) device = "iPhone Web";
     else if (userAgent.includes("Windows")) device = "PC Windows";
 
-    // Monta o payload igualzinho ao do seu App React Native
-    // Assim o próprio listener MQTT ali em cima vai capturar e processar
     const payload = `ABRIR_PORTAO_AGORA|WebUser|${device}`;
-    
     client.publish(TOPIC_COMMAND, payload);
     
     res.json({ success: true });
+});
+
+// --- ROTA DE ATUALIZAÇÃO OTA (NOVA) ---
+app.post('/api/admin/update', (req, res) => {
+    const token = req.headers['authorization'];
+    if (!activeTokens.includes(token)) return res.status(403).json({ error: "Acesso Negado." });
+
+    console.log("🔄 COMANDO: Iniciando atualização de firmware via OTA...");
+    
+    // Envia o comando exato que o ESP32 espera
+    client.publish(TOPIC_COMMAND, "ATUALIZAR_FIRMWARE");
+    
+    // Avisa o front-end
+    sseClients.forEach(c => c.res.write(`data: STATUS_ATUALIZANDO_SISTEMA\n\n`));
+
+    res.json({ success: true, message: "Comando enviado!" });
 });
 
 app.post('/api/logout', (req, res) => {

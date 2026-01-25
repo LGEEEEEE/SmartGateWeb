@@ -7,7 +7,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    overflow: hidden;
+    overflow: hidden; /* Evita rolagem indesejada */
 }
 
 .screen {
@@ -19,6 +19,7 @@ body {
     justify-content: center;
     position: absolute;
     transition: opacity 0.3s;
+    overflow-y: auto; /* Permite rolar se a tela for pequena */
 }
 
 .hidden { display: none !important; }
@@ -57,10 +58,11 @@ button:active { transform: scale(0.95); }
     position: absolute; top: 0; width: 100%; padding: 20px;
     display: flex; justify-content: space-between; align-items: center;
     box-sizing: border-box; background: #1e1e1e;
+    z-index: 10;
 }
 .btn-logout { width: auto; padding: 8px 15px; background: #333; color: #ccc; font-size: 0.8rem; }
 
-.status-container { margin-top: -50px; text-align: center; margin-bottom: 50px; }
+.status-container { margin-top: 0px; text-align: center; margin-bottom: 30px; }
 .status-circle {
     width: 20px; height: 20px; border-radius: 50%;
     background: #555; margin: 0 auto 10px;
@@ -78,4 +80,58 @@ button:active { transform: scale(0.95); }
 #btnOpen:active {
     background: #1a1a1a;
     box-shadow: inset 5px 5px 10px #0b0b0b, inset -5px -5px 10px #2a2a2a;
+}
+
+/* ESTILO DO PAINEL ADMIN (NOVO) */
+summary {
+    outline: none;
+    padding: 10px;
+    user-select: none;
+}
+
+.admin-box {
+    margin-top: 15px;
+    padding: 15px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    animation: fadeIn 0.5s;
+    width: 80vw;
+    max-width: 300px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.admin-box p {
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 10px;
+}
+
+.btn-update {
+    background: linear-gradient(45deg, #0d47a1, #1976d2); /* Azul Técnico */
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    width: 100%;
+    font-size: 0.9rem;
+    font-weight: bold;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.btn-update:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+}
+
+.warning-text {
+    color: #ff9800 !important; /* Laranja de alerta */
+    font-size: 0.7rem !important;
+    margin-top: 8px !important;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
 }

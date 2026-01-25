@@ -5,12 +5,11 @@ const statusIndicator = document.getElementById('statusIndicator');
 const btnOpen = document.getElementById('btnOpen');
 
 // --- VARIÁVEIS DE LÓGICA DO PORTÃO ---
-let estadoAtual = "DESCONHECIDO"; // 'FECHADO', 'ABRINDO', 'ABERTO', 'FECHANDO', 'PARADO'
+let estadoAtual = "DESCONHECIDO"; 
 let timerMovimento = null;
-const TEMPO_ABERTURA = 15000; // 15 segundos
+const TEMPO_ABERTURA = 15000; 
 
-// MEMÓRIA DE DIREÇÃO: Começamos assumindo que a última coisa que ele fez foi fechar
-// Assim, o próximo comando lógico será ABRIR.
+// MEMÓRIA DE DIREÇÃO
 let ultimaDirecao = "FECHANDO"; 
 
 // --- INICIALIZAÇÃO ---
@@ -61,15 +60,12 @@ function fazerLogout() {
 
 // --- COMANDO DE ACIONAMENTO ---
 async function abrirPortao() {
-    // Efeito visual imediato
     btnOpen.style.borderColor = "#fff";
     if(navigator.vibrate) navigator.vibrate(50);
     setTimeout(() => btnOpen.style.borderColor = "#333", 300);
 
-    // LÓGICA DE PREVISÃO (Aqui está a correção)
     gerenciarLogicaMovimento();
 
-    // Envia comando ao servidor
     try {
         await fetch('/api/acionar', {
             method: 'POST',
@@ -79,37 +75,28 @@ async function abrirPortao() {
             }
         });
     } catch (e) {
-        // Se der erro de rede, volta o status para erro mas não para a lógica visual 
-        // (pois o relé pode ter acionado mesmo sem resposta HTTP)
         console.error("Erro no envio do comando");
     }
 }
 
-// --- LÓGICA INTELIGENTE (CÉREBRO DO APP) ---
+// --- LÓGICA INTELIGENTE ---
 function gerenciarLogicaMovimento() {
-    // 1. Se estiver totalmente FECHADO -> Abre
     if (estadoAtual === "FECHADO") {
         iniciarAnimacao("ABRINDO");
     } 
-    // 2. Se estiver totalmente ABERTO -> Fecha
     else if (estadoAtual === "ABERTO") {
         iniciarAnimacao("FECHANDO");
     }
-    // 3. Se estiver SE MOVENDO -> PARA
     else if (estadoAtual === "ABRINDO" || estadoAtual === "FECHANDO") {
-        pararAnimacao(); // Vai para estado PARADO
+        pararAnimacao(); 
     }
-    // 4. Se estiver PARADO -> INVERTE a direção anterior
     else if (estadoAtual === "PARADO") {
         if (ultimaDirecao === "ABRINDO") {
-            // Se estava abrindo antes de parar, agora FECHA
             iniciarAnimacao("FECHANDO");
         } else {
-            // Se estava fechando antes de parar, agora ABRE
             iniciarAnimacao("ABRINDO");
         }
     }
-    // Caso de segurança (Desconhecido) -> Tenta abrir
     else {
         iniciarAnimacao("ABRINDO");
     }
@@ -117,20 +104,16 @@ function gerenciarLogicaMovimento() {
 
 function iniciarAnimacao(novoEstado) {
     estadoAtual = novoEstado;
-    
-    // Atualiza a memória de direção
     if (novoEstado === "ABRINDO" || novoEstado === "FECHANDO") {
         ultimaDirecao = novoEstado;
     }
     
     let texto = novoEstado === "ABRINDO" ? "Abrindo... 🔼" : "Fechando... 🔽";
-    let cor = "#FFD700"; // Amarelo
+    let cor = "#FFD700"; 
     atualizarUI(texto, cor);
 
-    // Cancela timer anterior se houver
     if (timerMovimento) clearTimeout(timerMovimento);
 
-    // Inicia contagem de 15s
     timerMovimento = setTimeout(() => {
         if (novoEstado === "ABRINDO") {
             finalizarEstado("ABERTO");
@@ -142,24 +125,19 @@ function iniciarAnimacao(novoEstado) {
 
 function pararAnimacao() {
     if (timerMovimento) clearTimeout(timerMovimento);
-    
-    // Antes de mudar para PARADO, salvamos o que ele estava fazendo
-    // (Isso já é feito no iniciarAnimacao, mas reforçamos aqui se necessário)
-    // O estadoAtual aqui ainda é "ABRINDO" ou "FECHANDO" antes de mudar a linha abaixo
     ultimaDirecao = estadoAtual; 
-
     estadoAtual = "PARADO";
-    atualizarUI("PARADO ✋", "#ff8800"); // Laranja
+    atualizarUI("PARADO ✋", "#ff8800"); 
 }
 
 function finalizarEstado(estadoFinal) {
     estadoAtual = estadoFinal;
     if (estadoFinal === "ABERTO") {
-        atualizarUI("PORTÃO ABERTO 🔓", "#ff4444"); // Vermelho
-        ultimaDirecao = "ABRINDO"; // Garante memória
+        atualizarUI("PORTÃO ABERTO 🔓", "#ff4444"); 
+        ultimaDirecao = "ABRINDO"; 
     } else {
-        atualizarUI("PORTÃO FECHADO 🔒", "#4CAF50"); // Verde
-        ultimaDirecao = "FECHANDO"; // Garante memória
+        atualizarUI("PORTÃO FECHADO 🔒", "#4CAF50"); 
+        ultimaDirecao = "FECHANDO"; 
     }
 }
 
@@ -170,21 +148,20 @@ function conectarSSE() {
     evtSource.onmessage = function(event) {
         const msg = event.data;
         
-        // Proteção para não quebrar a animação de 15s
         const estamosMovendo = (estadoAtual === "ABRINDO" || estadoAtual === "FECHANDO");
         const estamosParados = (estadoAtual === "PARADO");
 
         if(msg === "ESTADO_REAL_FECHADO") {
-            // O sensor físico manda mais que qualquer lógica
             if (timerMovimento) clearTimeout(timerMovimento);
             finalizarEstado("FECHADO");
         } 
         else if (msg === "ESTADO_REAL_ABERTO") {
-            // Só aceita "Aberto" do servidor se não estivermos no meio de uma lógica manual
-            // Ou se o app acabou de abrir ("DESCONHECIDO" ou "AGUARDANDO")
             if (!estamosMovendo && !estamosParados) {
                 finalizarEstado("ABERTO");
             }
+        }
+        else if (msg === "STATUS_ATUALIZANDO_SISTEMA") {
+             atualizarUI("ATUALIZANDO FIRMWARE... ☁️", "#00d2ff");
         }
         else if (msg === "AGUARDANDO_ATUALIZACAO") {
             if(estadoAtual === "DESCONHECIDO") {
@@ -199,4 +176,49 @@ function atualizarUI(texto, cor) {
     statusText.style.color = cor;
     statusIndicator.style.backgroundColor = cor;
     statusIndicator.style.boxShadow = `0 0 15px ${cor}`;
+}
+
+// --- FUNÇÃO DE ATUALIZAÇÃO (OTA) ---
+async function solicitarUpdate() {
+    const confirmar = confirm(
+        "⚠️ ATENÇÃO: ATUALIZAÇÃO DE SISTEMA\n\n" +
+        "Isso fará o ESP32 baixar a versão mais recente do arquivo .bin no seu GitHub.\n\n" +
+        "1. Você já subiu o arquivo novo?\n" +
+        "2. O portão vai reiniciar sozinho.\n\n" +
+        "Deseja continuar?"
+    );
+
+    if (!confirmar) return;
+
+    const btn = document.querySelector('.btn-update');
+    const textoOriginal = btn.innerText;
+    
+    btn.innerText = "⏳ Enviando...";
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
+
+    try {
+        const res = await fetch('/api/admin/update', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': localStorage.getItem('gate_token') 
+            }
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            alert("✅ Comando Enviado!\n\nFique de olho no LED do ESP32 ou no status aqui no app.");
+        } else {
+            alert("❌ Erro: " + (data.error || "Falha desconhecida"));
+        }
+    } catch (e) {
+        alert("❌ Erro de conexão com o servidor.");
+        console.error(e);
+    }
+
+    btn.innerText = textoOriginal;
+    btn.disabled = false;
+    btn.style.opacity = "1";
 }
