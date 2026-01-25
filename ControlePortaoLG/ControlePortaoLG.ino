@@ -1,12 +1,12 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include <HTTPUpdate.h> // <--- BIBLIOTECA MÁGICA DE ATUALIZAÇÃO
+#include <HTTPUpdate.h> 
 #include "secrets.h" 
 
 // --- CONFIGURAÇÃO OTA WEB ---
-// Cole aqui o link DIRETO do seu arquivo .bin (Ex: GitHub Raw ou seu site)
-#define URL_FIRMWARE "https://raw.githubusercontent.com/LGEEEEEE/SmartGateWeb/main/atualizacao.bin"
+// O Link RAW do seu binário no GitHub
+#define URL_FIRMWARE "https://raw.githubusercontent.com/LGEEEEEE/SmartGateWeb/main/ControlePortaoLG/build/esp32.esp32.esp32doit-devkit-v1/ControlePortaoLG.ino.bin"
 
 // --- HARDWARE ---
 const int PINO_RELE_REAL = 18;    
@@ -22,55 +22,48 @@ PubSubClient client(espClient);
 
 bool estadoSensorAnterior = false;
 
-// --- FUNÇÃO NOVA: Realiza a atualização via Internet ---
+// --- FUNÇÃO DE STATUS ---
+void publicarEstadoInicial() {
+  if (digitalRead(PINO_SENSOR) == HIGH) {
+     client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_ABERTO", true); 
+     Serial.println("[STATUS] Enviado: ABERTO");
+  } else {
+     client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_FECHADO", true);
+     Serial.println("[STATUS] Enviado: FECHADO");
+  }
+}
+
+// --- FUNÇÃO DE UPDATE ---
 void realizarUpdateFirmware() {
-  Serial.println("\n[UPDATE] Iniciando processo de atualização OTA...");
-  Serial.println("[UPDATE] Baixando firmware de: " + String(URL_FIRMWARE));
-  
-  // Avisa no MQTT que vai cair para atualizar
+  Serial.println("\n[UPDATE] Iniciando atualização OTA...");
   client.publish(MQTT_TOPIC_STATUS, "STATUS_ATUALIZANDO_SISTEMA", true);
   
-  // Cliente seguro para baixar de sites HTTPS (GitHub, etc)
   WiFiClientSecure clientOTA;
-  clientOTA.setInsecure(); // Ignora certificado SSL para facilitar
+  clientOTA.setInsecure();
   
-  // Essa função trava o código enquanto baixa e grava. Se der certo, ele reinicia sozinho.
   t_httpUpdate_return ret = httpUpdate.update(clientOTA, URL_FIRMWARE);
 
-  // Se chegou aqui, é porque deu erro (se der certo ele reinicia antes)
   switch (ret) {
     case HTTP_UPDATE_FAILED:
-      Serial.printf("[UPDATE] FALHA: (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+      Serial.printf("[UPDATE] FALHA (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
       client.publish(MQTT_TOPIC_STATUS, "ERRO_ATUALIZACAO", true);
       break;
     case HTTP_UPDATE_NO_UPDATES:
       Serial.println("[UPDATE] Nenhuma atualização necessária.");
       break;
     case HTTP_UPDATE_OK:
-      Serial.println("[UPDATE] Atualização OK! (Isso não deve aparecer pois ele reinicia)");
+      Serial.println("[UPDATE] OK! Reiniciando...");
       break;
-  }
-}
-
-void publicarEstadoInicial() {
-  if (digitalRead(PINO_SENSOR) == HIGH) {
-     client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_ABERTO", true); 
-     Serial.println("[STATUS] Enviado inicial: ABERTO");
-  } else {
-     client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_FECHADO", true);
-     Serial.println("[STATUS] Enviado inicial: FECHADO");
   }
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1000); 
-  
-  Serial.println("\n\n--- INICIANDO SISTEMA SMART GATE (COM OTA WEB) ---");
+  Serial.println("\n\n--- INICIANDO SISTEMA SMART GATE V2 (COM CHECK) ---");
 
   pinMode(PINO_RELE_REAL, INPUT);
-  pinMode(PINO_FANTASMA, OUTPUT);
-  digitalWrite(PINO_FANTASMA, LOW);
+  pinMode(PINO_FANTASMA, OUTPUT); digitalWrite(PINO_FANTASMA, LOW);
   pinMode(PINO_SENSOR, INPUT_PULLUP); 
 
   setup_wifi();
@@ -94,61 +87,47 @@ void setup_wifi() {
     delay(500);
     Serial.print(".");
     tentativasWifi++;
-    
     if (tentativasWifi > 60) { 
-        Serial.println("\n[ERRO] Falha crítica no WiFi. Reiniciando...");
+        Serial.println("\n[ERRO] WiFi timeout. Reiniciando...");
         ESP.restart();
     }
   }
-  
-  Serial.println("\n[WIFI] Conectado com Sucesso!");
+  Serial.println("\n[WIFI] Conectado!");
   Serial.print("[WIFI] IP: ");
   Serial.println(WiFi.localIP());
 }
 
 void acionarReleSeguro() {
-  Serial.println("\n>>> INICIO DA SEQUENCIA DE ABERTURA <<<");
-  
-  Serial.println("1. [AÇÃO] Ativando pino 18 como OUTPUT...");
+  Serial.println("\n>>> ACIONANDO PORTÃO <<<");
   pinMode(PINO_RELE_REAL, OUTPUT);
-  digitalWrite(PINO_RELE_REAL, HIGH); 
-  delay(50); 
-
-  Serial.println("2. [AÇÃO] Enviando sinal LOW (LIGAR RELÉ)...");
-  digitalWrite(PINO_RELE_REAL, LOW); 
-  delay(500); 
-
-  Serial.println("3. [AÇÃO] Enviando sinal HIGH (DESLIGAR RELÉ)...");
-  digitalWrite(PINO_RELE_REAL, HIGH); 
-  delay(50); 
-
-  Serial.println("4. [AÇÃO] Matando pino 18 (Voltando para INPUT)...");
+  digitalWrite(PINO_RELE_REAL, HIGH); delay(50); 
+  digitalWrite(PINO_RELE_REAL, LOW); delay(500); 
+  digitalWrite(PINO_RELE_REAL, HIGH); delay(50); 
   pinMode(PINO_RELE_REAL, INPUT); 
-  
-  Serial.println(">>> FIM DA SEQUENCIA. SISTEMA SEGURO. <<<\n");
+  Serial.println(">>> FIM DO PULSO <<<\n");
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
   String mensagem = "";
-  for (int i = 0; i < length; i++) {
-    mensagem += (char)payload[i];
-  }
+  for (int i = 0; i < length; i++) mensagem += (char)payload[i];
   
-  Serial.print("[MQTT] Mensagem Recebida: ");
+  Serial.print("[MQTT] Mensagem: ");
   Serial.println(mensagem);
 
-  // --- COMANDOS ---
+  // --- LÓGICA DE COMANDOS ---
   
   if (mensagem.startsWith("ABRIR_PORTAO_AGORA")) {
-    if (digitalRead(PINO_SENSOR) == LOW) {
-       client.publish(MQTT_TOPIC_STATUS, "STATUS_ABRINDO", true);
-    } else {
-       client.publish(MQTT_TOPIC_STATUS, "STATUS_FECHANDO", true);
-    }
+    if (digitalRead(PINO_SENSOR) == LOW) client.publish(MQTT_TOPIC_STATUS, "STATUS_ABRINDO", true);
+    else client.publish(MQTT_TOPIC_STATUS, "STATUS_FECHANDO", true);
     acionarReleSeguro();
   }
   
-  // >>> NOVO COMANDO PARA ATUALIZAR <<<
+  // >>> NOVO: CHECAGEM DE STATUS <<<
+  else if (mensagem.startsWith("CHECAR_STATUS")) {
+    Serial.println("[CMD] Check-up solicitado.");
+    publicarEstadoInicial();
+  }
+  
   else if (mensagem.startsWith("ATUALIZAR_FIRMWARE")) {
     realizarUpdateFirmware();
   }
@@ -156,25 +135,20 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void reconnect() {
   if (!client.connected()) {
-    Serial.print("[MQTT] Tentando reconexão...");
-    String clientId = "ESP32_Ghost_" + String(random(0xffff), HEX);
+    Serial.print("[MQTT] Reconectando...");
+    String clientId = "ESP32_" + String(random(0xffff), HEX);
     
     if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
-      Serial.println(" CONECTADO!");
+      Serial.println(" OK!");
       tentativasFalhas = 0;
       client.subscribe(MQTT_TOPIC_COMMAND);
       publicarEstadoInicial();
-      
     } else {
       tentativasFalhas++;
-      Serial.print(" Falha. Tentativa ");
-      Serial.print(tentativasFalhas);
-      Serial.println("/15");
-
+      Serial.print(" Falha. ");
       if (tentativasFalhas >= MAX_TENTATIVAS_MQTT) {
-         Serial.println("\n[CRÍTICO] Reiniciando ESP32...");
-         delay(1000);
-         ESP.restart(); 
+         Serial.println("Reiniciando ESP32...");
+         delay(1000); ESP.restart(); 
       }
       delay(5000);
     }
@@ -186,17 +160,10 @@ void loop() {
   client.loop();
 
   int leituraAtual = digitalRead(PINO_SENSOR);
-  
   if (leituraAtual != estadoSensorAnterior) {
     delay(50); 
     if (digitalRead(PINO_SENSOR) == leituraAtual) {
-      if (leituraAtual == HIGH) {
-        Serial.println("[SENSOR] Portão detectado: ABERTO");
-        client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_ABERTO", true);
-      } else {
-        Serial.println("[SENSOR] Portão detectado: FECHADO");
-        client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_FECHADO", true);
-      }
+      publicarEstadoInicial(); // Reutiliza a função que já envia a mensagem certa
       estadoSensorAnterior = leituraAtual;
     }
   }
