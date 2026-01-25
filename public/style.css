@@ -7,7 +7,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    overflow: hidden; /* Evita rolagem indesejada */
+    overflow: hidden;
 }
 
 .screen {
@@ -19,10 +19,57 @@ body {
     justify-content: center;
     position: absolute;
     transition: opacity 0.3s;
-    overflow-y: auto; /* Permite rolar se a tela for pequena */
+    overflow-y: auto;
 }
 
 .hidden { display: none !important; }
+
+/* --- TOASTS (NOTIFICAÇÕES) --- */
+#toast-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    width: 90%;
+    max-width: 350px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none; /* Permite clicar através do container vazio */
+}
+
+.toast {
+    background: #1e1e1e;
+    color: #fff;
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.95rem;
+    opacity: 0;
+    transform: translateY(-20px);
+    animation: slideIn 0.3s forwards;
+    pointer-events: auto;
+    border-left: 5px solid #555;
+}
+
+.toast.success { border-left-color: #4CAF50; }
+.toast.error { border-left-color: #ff4444; }
+.toast.info { border-left-color: #2196F3; }
+
+.toast.hiding {
+    animation: fadeOut 0.3s forwards;
+}
+
+@keyframes slideIn {
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeOut {
+    to { opacity: 0; transform: translateY(-20px); }
+}
 
 /* LOGIN CARD */
 .card {
@@ -82,56 +129,22 @@ button:active { transform: scale(0.95); }
     box-shadow: inset 5px 5px 10px #0b0b0b, inset -5px -5px 10px #2a2a2a;
 }
 
-/* ESTILO DO PAINEL ADMIN (NOVO) */
-summary {
-    outline: none;
-    padding: 10px;
-    user-select: none;
-}
-
+/* PAINEL ADMIN */
+summary { outline: none; padding: 10px; user-select: none; }
 .admin-box {
-    margin-top: 15px;
-    padding: 15px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 12px;
-    animation: fadeIn 0.5s;
-    width: 80vw;
-    max-width: 300px;
-    margin-left: auto;
-    margin-right: auto;
+    margin-top: 15px; padding: 15px; background: #1a1a1a;
+    border: 1px solid #333; border-radius: 12px;
+    animation: fadeIn 0.5s; width: 80vw; max-width: 300px;
+    margin-left: auto; margin-right: auto;
 }
-
-.admin-box p {
-    font-size: 0.8rem;
-    color: #888;
-    margin-bottom: 10px;
-}
-
+.admin-box p { font-size: 0.8rem; color: #888; margin-bottom: 10px; }
 .btn-update {
-    background: linear-gradient(45deg, #0d47a1, #1976d2); /* Azul Técnico */
-    color: white;
-    border: none;
-    padding: 12px;
-    border-radius: 8px;
-    width: 100%;
-    font-size: 0.9rem;
-    font-weight: bold;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    background: linear-gradient(45deg, #0d47a1, #1976d2);
+    color: white; border: none; padding: 12px;
+    border-radius: 8px; width: 100%; font-size: 0.9rem;
+    font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
 }
+.btn-update:active { transform: scale(0.98); opacity: 0.9; }
+.warning-text { color: #ff9800 !important; font-size: 0.7rem !important; margin-top: 8px !important; }
 
-.btn-update:active {
-    transform: scale(0.98);
-    opacity: 0.9;
-}
-
-.warning-text {
-    color: #ff9800 !important; /* Laranja de alerta */
-    font-size: 0.7rem !important;
-    margin-top: 8px !important;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }

@@ -8,6 +8,8 @@
 </head>
 <body>
 
+    <div id="toast-container"></div>
+
     <div id="login-screen" class="screen">
         <div class="card">
             <h1>🔐 Acesso Seguro</h1>
@@ -45,6 +47,9 @@
                     <button onclick="solicitarUpdate()" class="btn-update">
                         ☁️ Instalar Atualização
                     </button>
+                    <div id="updateSuccessCheck" class="hidden" style="color: #4CAF50; margin-top: 10px; font-weight: bold;">
+                        ✓ Sistema Atualizado!
+                    </div>
                     <p class="warning-text">⚠️ O portão ficará indisponível por 1 minuto.</p>
                 </div>
             </details>
