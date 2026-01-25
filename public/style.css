@@ -1,0 +1,81 @@
+body {
+    background-color: #121212;
+    color: white;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    transition: opacity 0.3s;
+}
+
+.hidden { display: none !important; }
+
+/* LOGIN CARD */
+.card {
+    background: #1e1e1e;
+    padding: 30px;
+    border-radius: 20px;
+    width: 80%;
+    max-width: 300px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+input {
+    width: 90%; padding: 15px; margin: 20px 0;
+    border-radius: 10px; border: 1px solid #333;
+    background: #121212; color: white; font-size: 1.1rem;
+    text-align: center; outline: none;
+}
+input:focus { border-color: #4CAF50; }
+
+button {
+    width: 100%; padding: 15px; border-radius: 10px;
+    border: none; font-weight: bold; cursor: pointer;
+    font-size: 1rem; transition: transform 0.1s;
+}
+button:active { transform: scale(0.95); }
+
+#btnLogin { background: #4CAF50; color: white; }
+.error-msg { color: #ff4444; height: 20px; font-size: 0.9rem; }
+
+/* APP SCREEN */
+.top-bar {
+    position: absolute; top: 0; width: 100%; padding: 20px;
+    display: flex; justify-content: space-between; align-items: center;
+    box-sizing: border-box; background: #1e1e1e;
+}
+.btn-logout { width: auto; padding: 8px 15px; background: #333; color: #ccc; font-size: 0.8rem; }
+
+.status-container { margin-top: -50px; text-align: center; margin-bottom: 50px; }
+.status-circle {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #555; margin: 0 auto 10px;
+    box-shadow: 0 0 10px currentColor;
+}
+
+/* BOTÃO GIGANTE */
+#btnOpen {
+    width: 200px; height: 200px; border-radius: 50%;
+    background: linear-gradient(145deg, #2e2e2e, #1a1a1a);
+    box-shadow: 5px 5px 15px #0b0b0b, -5px -5px 15px #2a2a2a;
+    border: 4px solid #333; color: #4CAF50; font-size: 3rem;
+    display: flex; align-items: center; justify-content: center;
+}
+#btnOpen:active {
+    background: #1a1a1a;
+    box-shadow: inset 5px 5px 10px #0b0b0b, inset -5px -5px 10px #2a2a2a;
+}
