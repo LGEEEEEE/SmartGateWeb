@@ -25,10 +25,11 @@ const TOPIC_STATUS = "projeto_LG/casa/portao/status";
 // Memória de Estado
 let ultimoEstadoConhecido = "AGUARDANDO_ATUALIZACAO"; 
 let ultimoEstadoNotificado = ""; 
+let ultimoTempoNotificacao = 0; // Anti-Spam
 let activeTokens = [];
 let sseClients = [];
 
-// Memória de QUEM abriu (Para notificações ricas)
+// Memória de QUEM abriu
 let ultimoComandoOrigem = null; 
 let timeoutComando = null;
 
@@ -52,49 +53,51 @@ client.on('connect', () => {
 client.on('message', (topic, message) => {
     const msg = message.toString();
 
-    // 1. SE FOR COMANDO (Vindo do App ou Site)
+    // 1. COMANDOS
     if (topic === TOPIC_COMMAND) {
-        // O payload geralmente é: "COMANDO|Usuario|Dispositivo"
         const partes = msg.split('|');
-        
         if (partes.length >= 3) {
             const comando = partes[0];
             const usuario = partes[1]; 
             const dispositivo = partes[2]; 
             
-            // Só registramos a origem se for uma ação de abrir, para notificar depois
             if (comando === "ABRIR_PORTAO_AGORA") {
                 ultimoComandoOrigem = `${usuario} via ${dispositivo}`;
                 console.log(`👤 Comando recebido de: ${ultimoComandoOrigem}`);
-    
                 if (timeoutComando) clearTimeout(timeoutComando);
-                timeoutComando = setTimeout(() => {
-                    ultimoComandoOrigem = null;
-                }, 40000); // Esquece quem abriu depois de 40s
+                timeoutComando = setTimeout(() => { ultimoComandoOrigem = null; }, 40000);
             }
         }
     }
 
-    // 2. SE FOR STATUS (Vindo do ESP32/Portão)
+    // 2. STATUS
     if (topic === TOPIC_STATUS) {
+        // Ignora status repetido (filtro básico)
+        if (msg === ultimoEstadoConhecido) return;
+
         console.log(`📥 Status Recebido: ${msg}`);
         ultimoEstadoConhecido = msg;
 
-        // Atualiza todos os navegadores conectados (SSE) em tempo real
+        // Atualiza Frontend
         sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
 
-        // Verifica se precisa mandar Push Notification (ntfy)
+        // Verifica Notificação
         verificarENotificar(msg);
     }
 });
 
-// --- FUNÇÃO DE NOTIFICAÇÃO INTELIGENTE ---
+// --- NOTIFICAÇÃO INTELIGENTE ---
 function verificarENotificar(estado) {
-    // Só notifica estados finais (Aberto/Fechado)
     if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") return;
-    
-    // Evita spam: se o estado é igual ao último notificado, ignora
     if (estado === ultimoEstadoNotificado) return;
+
+    // --- PROTEÇÃO ANTI-SPAM DE 3 SEGUNDOS ---
+    // Se tentou notificar muito rápido após a última, ignora (exceto se for crítico)
+    const agora = Date.now();
+    if (agora - ultimoTempoNotificacao < 3000) {
+        console.log("🚫 Notificação bloqueada por ser muito rápida (Anti-Bounce Server).");
+        return;
+    }
 
     let titulo = "";
     let mensagem = "";
@@ -103,16 +106,13 @@ function verificarENotificar(estado) {
     
     if (estado === "ESTADO_REAL_ABERTO") {
         titulo = "Portão Aberto ⚠️";
-        
-        // Adiciona quem abriu na mensagem, se soubermos
         if (ultimoComandoOrigem) {
             origemTexto = `\n📱 Acionado por: ${ultimoComandoOrigem}`;
-            ultimoComandoOrigem = null; // Limpa após usar
+            ultimoComandoOrigem = null; 
             if (timeoutComando) clearTimeout(timeoutComando);
         } else {
             origemTexto = "\n🎮 Acionado por: Controle Remoto ou Manual";
         }
-
         mensagem = `O portão acabou de abrir.${origemTexto}`;
         tags = ["warning", "door"]; 
 
@@ -122,7 +122,8 @@ function verificarENotificar(estado) {
         tags = ["white_check_mark", "lock"];
     }
 
-    ultimoEstadoNotificado = estado; // Atualiza a memória
+    ultimoEstadoNotificado = estado;
+    ultimoTempoNotificacao = agora; 
 
     if (NTFY_TOPIC) {
         console.log(`🔔 Enviando Notificação: ${titulo}`);
@@ -134,34 +135,22 @@ function verificarENotificar(estado) {
             tags: tags,
             click: "https://smartgateweb.onrender.com"
         })
-        .catch(err => {
-            console.error("❌ Erro ao enviar ntfy:", err.message);
-        });
+        .catch(err => console.error("❌ Erro ntfy:", err.message));
     }
 }
 
-// --- ROTAS HTTP (API) ---
-
-// Rota de Eventos (SSE) - Mantém a conexão aberta com o navegador
+// --- ROTAS HTTP ---
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
-
     const id = Date.now();
     sseClients.push({ id, res });
-
-    // Envia o estado atual assim que conecta
     res.write(`data: ${ultimoEstadoConhecido}\n\n`);
-
-    // Remove cliente quando desconecta
-    req.on('close', () => {
-        sseClients = sseClients.filter(c => c.id !== id);
-    });
+    req.on('close', () => { sseClients = sseClients.filter(c => c.id !== id); });
 });
 
-// Rota de Login
 app.post('/api/login', (req, res) => {
     const { password } = req.body;
     if (password === APP_PASSWORD) {
@@ -173,51 +162,37 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-// Rota de Acionamento (Abrir ou Checar Status)
 app.post('/api/acionar', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeTokens.includes(token)) return res.status(403).json({ error: "Sessão Expirada." });
     
-    // Identifica dispositivo para o log
     const userAgent = req.headers['user-agent'] || "Web";
-    let device = "Navegador Web";
+    let device = "Web";
     if (userAgent.includes("Android")) device = "Android";
     else if (userAgent.includes("iPhone")) device = "iPhone";
     else if (userAgent.includes("Windows")) device = "PC";
 
-    // Se o frontend mandou um comando específico (ex: CHECAR_STATUS), usa ele. 
-    // Se não, usa o padrão ABRIR.
     const acao = req.body.comando_customizado || "ABRIR_PORTAO_AGORA";
-    
     const payload = `${acao}|WebUser|${device}`;
     client.publish(TOPIC_COMMAND, payload);
     
-    console.log(`📤 Comando enviado via API: ${payload}`);
+    console.log(`📤 Comando API: ${payload}`);
     res.json({ success: true });
 });
 
-// Rota de Atualização de Firmware (OTA)
 app.post('/api/admin/update', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeTokens.includes(token)) return res.status(403).json({ error: "Acesso Negado." });
-
-    console.log("🔄 COMANDO ADMIN: Iniciando atualização de firmware via OTA...");
-    
-    // 1. Manda o comando pro ESP32
+    console.log("🔄 ADMIN: Update OTA...");
     client.publish(TOPIC_COMMAND, "ATUALIZAR_FIRMWARE");
-    
-    // 2. Avisa IMEDIATAMENTE os navegadores (UX Instantânea)
-    // Isso faz aparecer o Toast "Baixando..." antes mesmo do ESP responder
     sseClients.forEach(c => c.res.write(`data: STATUS_ATUALIZANDO_SISTEMA\n\n`));
-
-    res.json({ success: true, message: "Comando enviado!" });
+    res.json({ success: true });
 });
 
-// Rota de Logout
 app.post('/api/logout', (req, res) => {
     const token = req.headers['authorization'];
     activeTokens = activeTokens.filter(t => t !== token);
     res.json({ success: true });
 });
 
-app.listen(PORT, () => console.log(`🚀 Servidor Smart Gate rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Smart Gate Server na porta ${PORT}`));
