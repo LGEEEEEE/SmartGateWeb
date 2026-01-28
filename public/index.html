@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Gate Pro</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="toast-container"></div>
+
+    <div id="login-screen" class="screen">
+        <div class="card">
+            <h1>🔐 Acesso Seguro</h1>
+            <p>Digite sua senha mestre</p>
+            <input type="password" id="passwordInput" placeholder="Senha">
+            <button onclick="fazerLogin()" id="btnLogin">ENTRAR</button>
+            <p id="loginError" class="error-msg"></p>
+        </div>
+    </div>
+
+    <div id="app-screen" class="screen hidden">
+        <div class="top-bar">
+            <span>Smart Gate 🏠</span>
+            <button onclick="fazerLogout()" class="btn-logout">Sair</button>
+        </div>
+
+        <div class="status-container">
+            <div id="statusIndicator" class="status-circle"></div>
+            <h2 id="statusText">Verificando...</h2>
+        </div>
+
+        <div class="control-area">
+            <button id="btnOpen" onclick="abrirPortao()">
+                <div class="icon-power">⚡</div>
+            </button>
+            <p>Toque para acionar</p>
+        </div>
+
+        <div style="margin-top: 40px; text-align: center; opacity: 0.8;">
+            <details>
+                <summary style="color: #666; cursor: pointer; font-size: 0.8rem; letter-spacing: 1px;">OPÇÕES AVANÇADAS</summary>
+                
+                <div class="admin-box">
+                    <p>Versão do Sistema: 1.0</p>
+                    <button onclick="solicitarUpdate()" class="btn-update">
+                        ☁️ Instalar Atualização
+                    </button>
+                    <div id="updateSuccessCheck" class="hidden" style="color: #4CAF50; margin-top: 10px; font-weight: bold;">
+                        ✓ Sistema Atualizado!
+                    </div>
+                    <p class="warning-text">⚠️ O portão ficará indisponível por 1 minuto.</p>
+                </div>
+            </details>
+        </div>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
