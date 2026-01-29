@@ -10,18 +10,17 @@ let estadoAtual = "DESCONHECIDO";
 let timerMovimento = null;
 const TEMPO_ABERTURA = 15000; 
 let ultimaDirecao = "FECHANDO"; 
-let emProcessoDeUpdate = false; // Flag para saber se estamos atualizando
+let emProcessoDeUpdate = false; 
 
 const savedToken = localStorage.getItem('gate_token');
 if (savedToken) mostrarApp();
 
-// --- SISTEMA DE TOASTS (NOTIFICAÇÕES) ---
+// --- SISTEMA DE TOASTS ---
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     
-    // Ícone baseado no tipo
     let icon = '';
     if (type === 'success') icon = '✅';
     else if (type === 'error') icon = '❌';
@@ -30,7 +29,6 @@ function showToast(message, type = 'info') {
     toast.innerHTML = `<span>${icon} ${message}</span>`;
     container.appendChild(toast);
 
-    // Remove após 3.5 segundos
     setTimeout(() => {
         toast.classList.add('hiding');
         toast.addEventListener('animationend', () => toast.remove());
@@ -70,7 +68,6 @@ function mostrarApp() {
     appScreen.classList.remove('hidden');
     conectarSSE();
 
-    // Teste inicial silencioso
     fetch('/api/acionar', {
         method: 'POST',
         headers: { 
@@ -128,7 +125,7 @@ async function solicitarUpdate() {
     }
 }
 
-// --- LÓGICA DE MOVIMENTO (SIMULAÇÃO VISUAL) ---
+// --- LÓGICA DE MOVIMENTO ---
 function gerenciarLogicaMovimento() {
     if (estadoAtual === "FECHADO") iniciarAnimacao("ABRINDO");
     else if (estadoAtual === "ABERTO") iniciarAnimacao("FECHANDO");
@@ -166,36 +163,31 @@ function conectarSSE() {
     const evtSource = new EventSource('/events');
     evtSource.onmessage = function(event) {
         const msg = event.data;
-        const movendo = (estadoAtual === "ABRINDO" || estadoAtual === "FECHANDO");
         
-        // 1. Recebemos status normal (Aberto/Fechado)
+        // 1. Recebemos status REAL (Prioridade MÁXIMA)
         if(msg === "ESTADO_REAL_FECHADO" || msg === "ESTADO_REAL_ABERTO") {
             
-            // LÓGICA DE SUCESSO DO UPDATE
-            // Se estávamos atualizando e agora recebemos um estado real, significa que o ESP voltou!
             if (emProcessoDeUpdate) {
                 emProcessoDeUpdate = false;
                 showToast("Firmware atualizado com sucesso!", "success");
-                
-                // Restaura botão e mostra check verde
                 const btn = document.querySelector('.btn-update');
                 btn.innerText = "☁️ Instalar Atualização"; btn.disabled = false;
                 updateSuccessCheck.classList.remove('hidden');
-                
-                // Esconde o check depois de 10s
                 setTimeout(() => updateSuccessCheck.classList.add('hidden'), 10000);
             }
 
+            // CORREÇÃO: Removemos a checagem "!movendo". 
+            // O sensor real tem prioridade sobre a animação simulada.
             if(msg === "ESTADO_REAL_FECHADO") {
                 if (timerMovimento) clearTimeout(timerMovimento);
                 finalizarEstado("FECHADO");
             } 
             else if (msg === "ESTADO_REAL_ABERTO") {
-                if (!movendo && estadoAtual !== "PARADO") finalizarEstado("ABERTO");
+                if (timerMovimento) clearTimeout(timerMovimento);
+                finalizarEstado("ABERTO");
             }
         }
         
-        // 2. Recebemos aviso que está atualizando
         else if (msg === "STATUS_ATUALIZANDO_SISTEMA") {
              emProcessoDeUpdate = true;
              atualizarUI("ATUALIZANDO FIRMWARE... ☁️", "#00d2ff");
@@ -211,7 +203,6 @@ function conectarSSE() {
     };
     
     evtSource.onerror = function() {
-        // Se cair a conexão (comum durante restart do ESP se o server depender dele)
         console.log("Conexão SSE oscilou...");
     };
 }

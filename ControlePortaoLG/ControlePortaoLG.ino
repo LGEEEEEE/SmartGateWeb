@@ -17,12 +17,12 @@ const int MAX_TENTATIVAS_MQTT = 15;
 int tentativasFalhas = 0;           
 
 // --- CONTROLE DE RUÍDO (FIX DO PROBLEMA) ---
-unsigned long ultimoTempoAberto = 0; // Marca quando o portão abriu
-const int TEMPO_IGNORAR_RUIDO = 12000; // 12 segundos para ignorar falsos fechamentos
+unsigned long ultimoTempoAberto = 0;
+// AUMENTADO PARA 16 SEGUNDOS PARA COBRIR O TEMPO DO FRONT-END (15s)
+const int TEMPO_IGNORAR_RUIDO = 16000; 
 
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
-
 bool estadoSensorAnterior = false; // false = Fechado (LOW), true = Aberto (HIGH)
 
 // --- FUNÇÃO DE STATUS ---
@@ -32,7 +32,7 @@ void publicarEstadoInicial() {
 
   if (sensorAtual == HIGH) {
      // Se está ABERTO, atualizamos o timestamp para ativar o filtro de ruído
-     ultimoTempoAberto = millis(); 
+     ultimoTempoAberto = millis();
      client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_ABERTO", true);
      Serial.println("[STATUS] Enviado: ABERTO");
   } else {
@@ -73,9 +73,10 @@ void realizarUpdateFirmware() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- INICIANDO SISTEMA SMART GATE V2.1 (FIX RUIDO) ---");
+  Serial.println("\n\n--- INICIANDO SISTEMA SMART GATE V2.2 (FIX SYNC) ---");
 
-  pinMode(PINO_RELE_REAL, INPUT); // Começa como input para evitar acionamento falso
+  pinMode(PINO_RELE_REAL, INPUT);
+  // Começa como input para evitar acionamento falso
   pinMode(PINO_FANTASMA, OUTPUT); digitalWrite(PINO_FANTASMA, LOW);
   pinMode(PINO_SENSOR, INPUT_PULLUP); 
 
@@ -95,6 +96,7 @@ void setup_wifi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int tentativasWifi = 0;
+  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -115,7 +117,8 @@ void acionarReleSeguro() {
   digitalWrite(PINO_RELE_REAL, HIGH); delay(50); 
   digitalWrite(PINO_RELE_REAL, LOW); delay(500); // Pulso de meio segundo
   digitalWrite(PINO_RELE_REAL, HIGH); delay(50); 
-  pinMode(PINO_RELE_REAL, INPUT); // Volta para alta impedância
+  pinMode(PINO_RELE_REAL, INPUT);
+  // Volta para alta impedância
   Serial.println(">>> FIM DO PULSO <<<\n");
 }
 
@@ -125,12 +128,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
   
   Serial.print("[MQTT] Mensagem: ");
   Serial.println(mensagem);
-
+  
   // --- LÓGICA DE COMANDOS ---
   if (mensagem.startsWith("ABRIR_PORTAO_AGORA")) {
     // Se vamos abrir, já marcamos o tempo para evitar leitura falsa instantânea
-    ultimoTempoAberto = millis(); 
-    
+    ultimoTempoAberto = millis();
     if (digitalRead(PINO_SENSOR) == LOW) client.publish(MQTT_TOPIC_STATUS, "STATUS_ABRINDO", true);
     else client.publish(MQTT_TOPIC_STATUS, "STATUS_FECHANDO", true);
     acionarReleSeguro();
@@ -150,6 +152,7 @@ void reconnect() {
   if (!client.connected()) {
     Serial.print("[MQTT] Reconectando...");
     String clientId = "ESP32_" + String(random(0xffff), HEX);
+    
     if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
       Serial.println(" OK!");
       tentativasFalhas = 0;
@@ -170,20 +173,21 @@ void reconnect() {
 void loop() {
   if (!client.connected()) reconnect();
   client.loop();
-
+  
   // Leitura do Sensor com Debounce Simples
   int leituraAtual = digitalRead(PINO_SENSOR);
   
   // Se leitura for diferente do estado anterior lógico (convertendo int para bool)
   // LOW = Fechado (false no meu bool lógico), HIGH = Aberto (true)
   bool estadoLidoBool = (leituraAtual == HIGH);
-
+  
   if (estadoLidoBool != estadoSensorAnterior) {
-    delay(100); // Aumentei o debounce físico para 100ms
+    delay(100); // Debounce físico
     
     // Confirma leitura
     if (digitalRead(PINO_SENSOR) == leituraAtual) {
-      publicarEstadoInicial(); // A função já contém o filtro anti-ruído
+      publicarEstadoInicial();
+      // A função já contém o filtro anti-ruído
       
       // Só atualizamos o estado anterior se o filtro deixar passar ou se for abertura
       if (leituraAtual == HIGH || (millis() - ultimoTempoAberto > TEMPO_IGNORAR_RUIDO)) {

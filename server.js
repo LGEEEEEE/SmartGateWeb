@@ -86,16 +86,17 @@ client.on('message', (topic, message) => {
     }
 });
 
-// --- NOTIFICAÇÃO INTELIGENTE ---
+// --- NOTIFICAÇÃO INTELIGENTE (CORRIGIDA) ---
 function verificarENotificar(estado) {
+    // CORREÇÃO CRÍTICA: Se não for um estado REAL, ignora.
     if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") return;
+    
     if (estado === ultimoEstadoNotificado) return;
 
     // --- PROTEÇÃO ANTI-SPAM DE 3 SEGUNDOS ---
-    // Se tentou notificar muito rápido após a última, ignora (exceto se for crítico)
     const agora = Date.now();
     if (agora - ultimoTempoNotificacao < 3000) {
-        console.log("🚫 Notificação bloqueada por ser muito rápida (Anti-Bounce Server).");
+        console.log("🚫 Notificação bloqueada por ser muito rápida.");
         return;
     }
 
@@ -103,6 +104,7 @@ function verificarENotificar(estado) {
     let mensagem = "";
     let tags = [];
     let origemTexto = "";
+    let deveNotificar = false;
     
     if (estado === "ESTADO_REAL_ABERTO") {
         titulo = "Portão Aberto ⚠️";
@@ -115,27 +117,32 @@ function verificarENotificar(estado) {
         }
         mensagem = `O portão acabou de abrir.${origemTexto}`;
         tags = ["warning", "door"]; 
+        deveNotificar = true;
 
-    } else {
+    } else if (estado === "ESTADO_REAL_FECHADO") { 
+        // AQUI ESTAVA O ERRO ANTES: AGORA USAMOS ELSE IF EXPLÍCITO
         titulo = "Portão Fechado 🔒";
         mensagem = "O portão foi fechado com segurança.";
         tags = ["white_check_mark", "lock"];
+        deveNotificar = true;
     }
 
-    ultimoEstadoNotificado = estado;
-    ultimoTempoNotificacao = agora; 
+    if (deveNotificar) {
+        ultimoEstadoNotificado = estado;
+        ultimoTempoNotificacao = agora; 
 
-    if (NTFY_TOPIC) {
-        console.log(`🔔 Enviando Notificação: ${titulo}`);
-        axios.post('https://ntfy.sh/', {
-            topic: NTFY_TOPIC,
-            title: titulo,
-            message: mensagem,
-            priority: 3, 
-            tags: tags,
-            click: "https://smartgateweb.onrender.com"
-        })
-        .catch(err => console.error("❌ Erro ntfy:", err.message));
+        if (NTFY_TOPIC) {
+            console.log(`🔔 Enviando Notificação: ${titulo}`);
+            axios.post('https://ntfy.sh/', {
+                topic: NTFY_TOPIC,
+                title: titulo,
+                message: mensagem,
+                priority: 3, 
+                tags: tags,
+                click: "https://smartgateweb.onrender.com"
+            })
+            .catch(err => console.error("❌ Erro ntfy:", err.message));
+        }
     }
 }
 
