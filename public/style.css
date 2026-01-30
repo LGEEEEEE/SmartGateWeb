@@ -1,150 +1,167 @@
+:root {
+    --bg-color: #0f1115;
+    --card-bg: rgba(30, 34, 45, 0.7);
+    --primary: #6366f1; /* Indigo moderno */
+    --primary-glow: rgba(99, 102, 241, 0.4);
+    --text-main: #ffffff;
+    --text-muted: #94a3b8;
+    --danger: #ef4444;
+    --success: #10b981;
+    --warning: #f59e0b;
+}
+
 body {
-    background-color: #121212;
-    color: white;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-color);
+    background-image: radial-gradient(circle at top, #1a1d29, #0f1115);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
     margin: 0;
     height: 100vh;
     display: flex;
     justify-content: center;
-    align-items: center;
     overflow: hidden;
 }
 
 .screen {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
     position: absolute;
-    transition: opacity 0.3s;
-    overflow-y: auto;
+    transition: opacity 0.4s ease;
 }
 
 .hidden { display: none !important; }
 
-/* --- TOASTS (NOTIFICAÇÕES) --- */
-#toast-container {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 9999;
-    width: 90%;
-    max-width: 350px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    pointer-events: none; /* Permite clicar através do container vazio */
-}
-
-.toast {
-    background: #1e1e1e;
-    color: #fff;
-    padding: 16px;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 0.95rem;
-    opacity: 0;
-    transform: translateY(-20px);
-    animation: slideIn 0.3s forwards;
-    pointer-events: auto;
-    border-left: 5px solid #555;
-}
-
-.toast.success { border-left-color: #4CAF50; }
-.toast.error { border-left-color: #ff4444; }
-.toast.info { border-left-color: #2196F3; }
-
-.toast.hiding {
-    animation: fadeOut 0.3s forwards;
-}
-
-@keyframes slideIn {
-    to { opacity: 1; transform: translateY(0); }
-}
-@keyframes fadeOut {
-    to { opacity: 0; transform: translateY(-20px); }
-}
-
-/* LOGIN CARD */
-.card {
-    background: #1e1e1e;
-    padding: 30px;
-    border-radius: 20px;
-    width: 80%;
-    max-width: 300px;
+/* --- LOGIN CARD (GLASSMORPHISM) --- */
+.glass-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 40px 30px;
+    border-radius: 24px;
+    width: 85%; max-width: 320px;
     text-align: center;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
 }
 
+.icon-header {
+    font-size: 3rem; color: var(--primary);
+    margin-bottom: 10px;
+}
+
+h1 { font-size: 1.5rem; margin: 10px 0 5px; font-weight: 600; }
+.subtitle { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 30px; }
+
+.input-group {
+    position: relative; margin-bottom: 15px;
+}
+.input-group i {
+    position: absolute; left: 15px; top: 50%;
+    transform: translateY(-50%); color: var(--text-muted);
+}
 input {
-    width: 90%; padding: 15px; margin: 20px 0;
-    border-radius: 10px; border: 1px solid #333;
-    background: #121212; color: white; font-size: 1.1rem;
-    text-align: center; outline: none;
+    width: 100%; padding: 16px 16px 16px 45px;
+    box-sizing: border-box;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.2); color: white;
+    font-size: 1rem; outline: none; transition: 0.3s;
 }
-input:focus { border-color: #4CAF50; }
+input:focus { border-color: var(--primary); background: rgba(0,0,0,0.4); }
 
-button {
-    width: 100%; padding: 15px; border-radius: 10px;
-    border: none; font-weight: bold; cursor: pointer;
-    font-size: 1rem; transition: transform 0.1s;
+button#btnLogin {
+    width: 100%; padding: 16px; margin-top: 20px;
+    border-radius: 12px; border: none;
+    background: var(--primary); color: white;
+    font-weight: 600; font-size: 1rem;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+    box-shadow: 0 4px 15px var(--primary-glow);
+    transition: transform 0.2s;
 }
-button:active { transform: scale(0.95); }
+button#btnLogin:active { transform: scale(0.96); }
+.error-msg { color: var(--danger); font-size: 0.85rem; height: 20px; margin-top: 10px; }
 
-#btnLogin { background: #4CAF50; color: white; }
-.error-msg { color: #ff4444; height: 20px; font-size: 0.9rem; }
-
-/* APP SCREEN */
+/* --- APP UI --- */
 .top-bar {
     position: absolute; top: 0; width: 100%; padding: 20px;
-    display: flex; justify-content: space-between; align-items: center;
-    box-sizing: border-box; background: #1e1e1e;
-    z-index: 10;
+    box-sizing: border-box; display: flex; justify-content: space-between;
+    align-items: center; z-index: 10;
 }
-.btn-logout { width: auto; padding: 8px 15px; background: #333; color: #ccc; font-size: 0.8rem; }
-
-.status-container { margin-top: 0px; text-align: center; margin-bottom: 30px; }
-.status-circle {
-    width: 20px; height: 20px; border-radius: 50%;
-    background: #555; margin: 0 auto 10px;
-    box-shadow: 0 0 10px currentColor;
+.user-info { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.1rem; }
+.btn-icon {
+    background: rgba(255,255,255,0.1); border: none;
+    width: 40px; height: 40px; border-radius: 50%;
+    color: var(--text-main); font-size: 1.2rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
 }
 
-/* BOTÃO GIGANTE */
+.main-content {
+    display: flex; flex-direction: column; align-items: center; gap: 40px;
+}
+
+/* Status Ring */
+.status-display { text-align: center; }
+.status-ring {
+    width: 80px; height: 80px; border-radius: 50%;
+    background: rgba(255,255,255,0.05);
+    border: 2px solid #333;
+    margin: 0 auto 15px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem; color: #555;
+    transition: all 0.5s ease;
+}
+.last-user { font-size: 0.8rem; color: var(--text-muted); margin-top: 5px; }
+
+/* Botão Power Moderno */
 #btnOpen {
-    width: 200px; height: 200px; border-radius: 50%;
-    background: linear-gradient(145deg, #2e2e2e, #1a1a1a);
-    box-shadow: 5px 5px 15px #0b0b0b, -5px -5px 15px #2a2a2a;
-    border: 4px solid #333; color: #4CAF50; font-size: 3rem;
+    width: 180px; height: 180px; border-radius: 50%;
+    background: linear-gradient(145deg, #1e222d, #14161f);
+    box-shadow:  10px 10px 30px #0b0c11, -10px -10px 30px #272c3d;
+    border: none; outline: none;
+    color: #444; font-size: 4rem; cursor: pointer;
+    transition: all 0.3s;
     display: flex; align-items: center; justify-content: center;
 }
 #btnOpen:active {
-    background: #1a1a1a;
-    box-shadow: inset 5px 5px 10px #0b0b0b, inset -5px -5px 10px #2a2a2a;
+    box-shadow: inset 10px 10px 20px #0b0c11, inset -10px -10px 20px #272c3d;
+    transform: scale(0.98);
+}
+/* Estado Ativo do Botão */
+#btnOpen.active-power {
+    color: var(--primary);
+    text-shadow: 0 0 20px var(--primary);
 }
 
-/* PAINEL ADMIN */
-summary { outline: none; padding: 10px; user-select: none; }
+/* Footer / Admin */
+.footer-options {
+    position: absolute; bottom: 30px; width: 100%; text-align: center;
+}
+summary {
+    list-style: none; color: var(--text-muted); font-size: 0.9rem;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
 .admin-box {
-    margin-top: 15px; padding: 15px; background: #1a1a1a;
-    border: 1px solid #333; border-radius: 12px;
-    animation: fadeIn 0.5s; width: 80vw; max-width: 300px;
-    margin-left: auto; margin-right: auto;
+    background: #1a1d29; margin: 15px auto 0; padding: 20px;
+    width: 80%; max-width: 300px; border-radius: 16px;
+    border: 1px solid #333; text-align: left;
+    animation: slideUp 0.3s;
 }
-.admin-box p { font-size: 0.8rem; color: #888; margin-bottom: 10px; }
-.btn-update {
-    background: linear-gradient(45deg, #0d47a1, #1976d2);
-    color: white; border: none; padding: 12px;
-    border-radius: 8px; width: 100%; font-size: 0.9rem;
-    font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-}
-.btn-update:active { transform: scale(0.98); opacity: 0.9; }
-.warning-text { color: #ff9800 !important; font-size: 0.7rem !important; margin-top: 8px !important; }
+.info-row { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 0.9rem; color: #888; }
+.badge { background: #333; padding: 2px 8px; border-radius: 4px; color: white; font-size: 0.75rem; }
 
-@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+.btn-update {
+    width: 100%; padding: 12px; background: #333; color: white;
+    border: none; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.success-msg { color: var(--success); font-size: 0.9rem; margin-top: 10px; text-align: center; }
+
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Toasts */
+#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100; }
+.toast {
+    background: #1e222d; color: white; padding: 12px 20px; margin-bottom: 10px;
+    border-radius: 50px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    display: flex; align-items: center; gap: 10px; border: 1px solid #333;
+}

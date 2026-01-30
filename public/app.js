@@ -2,80 +2,86 @@ const loginScreen = document.getElementById('login-screen');
 const appScreen = document.getElementById('app-screen');
 const statusText = document.getElementById('statusText');
 const statusIndicator = document.getElementById('statusIndicator');
+const statusIcon = document.getElementById('statusIcon');
 const btnOpen = document.getElementById('btnOpen');
 const updateSuccessCheck = document.getElementById('updateSuccessCheck');
+const lastUserText = document.getElementById('lastUserText');
 
-// --- VARIÁVEIS DE ESTADO ---
+// --- ESTADO ---
 let estadoAtual = "DESCONHECIDO"; 
 let timerMovimento = null;
 const TEMPO_ABERTURA = 15000; 
 let ultimaDirecao = "FECHANDO"; 
 let emProcessoDeUpdate = false; 
 
+// --- INICIALIZAÇÃO ---
 const savedToken = localStorage.getItem('gate_token');
+const savedName = localStorage.getItem('gate_username');
+
+// Preenche o nome se já tiver salvo
+if (savedName) document.getElementById('nameInput').value = savedName;
+
 if (savedToken) mostrarApp();
 
-// --- SISTEMA DE TOASTS ---
+// --- TOASTS ---
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     
-    let icon = '';
-    if (type === 'success') icon = '✅';
-    else if (type === 'error') icon = '❌';
-    else icon = 'ℹ️';
-
-    toast.innerHTML = `<span>${icon} ${message}</span>`;
+    let icon = type === 'success' ? 'ph-check-circle' : (type === 'error' ? 'ph-warning' : 'ph-info');
+    toast.innerHTML = `<i class="ph ${icon}"></i> <span>${message}</span>`;
+    
     container.appendChild(toast);
-
-    setTimeout(() => {
-        toast.classList.add('hiding');
-        toast.addEventListener('animationend', () => toast.remove());
-    }, 3500);
+    setTimeout(() => toast.remove(), 3500);
 }
 
-// --- LÓGICA DE LOGIN ---
+// --- LOGIN COM NOME ---
 async function fazerLogin() {
+    const name = document.getElementById('nameInput').value.trim();
     const password = document.getElementById('passwordInput').value;
     const btn = document.getElementById('btnLogin');
     const errorMsg = document.getElementById('loginError');
 
-    btn.innerText = "Verificando..."; btn.disabled = true;
+    if (!name) {
+        errorMsg.innerText = "Por favor, digite seu nome.";
+        return;
+    }
+
+    btn.innerHTML = `<i class="ph ph-spinner ph-spin"></i> Verificando...`; btn.disabled = true;
+    
     try {
         const res = await fetch('/api/login', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password })
+            body: JSON.stringify({ password, name }) // Envia o NOME
         });
         const data = await res.json();
+        
         if (data.success) {
             localStorage.setItem('gate_token', data.token);
+            localStorage.setItem('gate_username', name); // Salva o nome pra próxima
             mostrarApp();
-            showToast("Login realizado com sucesso!", "success");
         } else {
             errorMsg.innerText = "Senha Incorreta!";
             showToast("Senha incorreta", "error");
         }
     } catch (e) { 
         errorMsg.innerText = "Erro de conexão";
-        showToast("Erro ao conectar com servidor", "error");
     }
-    btn.innerText = "ENTRAR"; btn.disabled = false;
+    btn.innerHTML = `ENTRAR <i class="ph ph-arrow-right"></i>`; btn.disabled = false;
 }
 
 function mostrarApp() {
     loginScreen.classList.add('hidden');
     appScreen.classList.remove('hidden');
     conectarSSE();
-
+    
+    // Checagem inicial
     fetch('/api/acionar', {
         method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': localStorage.getItem('gate_token') 
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
         body: JSON.stringify({ comando_customizado: "CHECAR_STATUS" }) 
-    }).catch(e => console.log("Erro ao pedir status inicial"));
+    }).catch(e => console.log("Erro inicial"));
 }
 
 function fazerLogout() {
@@ -85,51 +91,40 @@ function fazerLogout() {
 
 // --- COMANDOS ---
 async function abrirPortao() {
-    btnOpen.style.borderColor = "#fff";
+    // Feedback visual no botão power
+    btnOpen.classList.add('active-power');
     if(navigator.vibrate) navigator.vibrate(50);
-    setTimeout(() => btnOpen.style.borderColor = "#333", 300);
+    setTimeout(() => btnOpen.classList.remove('active-power'), 300);
+
     gerenciarLogicaMovimento();
+    
     try {
         await fetch('/api/acionar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') }
         });
-    } catch (e) { 
-        console.error("Erro comando");
-        showToast("Erro ao enviar comando", "error");
-    }
+    } catch (e) { showToast("Erro ao enviar comando", "error"); }
 }
 
-// --- ATUALIZAÇÃO FIRMWARE (OTA) ---
 async function solicitarUpdate() {
-    if (!confirm("⚠️ Confirmar atualização?\n\nO portão irá reiniciar para baixar a versão mais recente do GitHub.")) return;
-    
+    if (!confirm("⚠️ Confirmar atualização de Firmware?")) return;
     const btn = document.querySelector('.btn-update');
-    btn.innerText = "⏳ Enviando..."; btn.disabled = true;
+    btn.innerHTML = `<i class="ph ph-spinner ph-spin"></i> Enviando...`; btn.disabled = true;
     
     try {
-        const res = await fetch('/api/admin/update', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') }
+        await fetch('/api/admin/update', {
+            method: 'POST', headers: { 'Authorization': localStorage.getItem('gate_token') }
         });
-        const data = await res.json();
-        
-        if (data.success) {
-            showToast("Comando enviado! Aguarde o reinício...", "info");
-        } else {
-            showToast("Erro: " + data.error, "error");
-            btn.innerText = "☁️ Instalar Atualização"; btn.disabled = false;
-        }
+        showToast("Comando enviado!", "info");
     } catch (e) { 
-        showToast("Erro de conexão.", "error");
-        btn.innerText = "☁️ Instalar Atualização"; btn.disabled = false;
+        btn.innerHTML = `<i class="ph ph-cloud-arrow-up"></i> Atualizar Firmware`; btn.disabled = false;
     }
 }
 
-// --- LÓGICA DE MOVIMENTO ---
+// --- LÓGICA VISUAL ---
 function gerenciarLogicaMovimento() {
     if (estadoAtual === "FECHADO") iniciarAnimacao("ABRINDO");
     else if (estadoAtual === "ABERTO") iniciarAnimacao("FECHANDO");
-    else if (estadoAtual === "ABRINDO" || estadoAtual === "FECHANDO") pararAnimacao(); 
     else if (estadoAtual === "PARADO") (ultimaDirecao === "ABRINDO") ? iniciarAnimacao("FECHANDO") : iniciarAnimacao("ABRINDO");
     else iniciarAnimacao("ABRINDO");
 }
@@ -137,9 +132,13 @@ function gerenciarLogicaMovimento() {
 function iniciarAnimacao(novoEstado) {
     estadoAtual = novoEstado;
     if (novoEstado === "ABRINDO" || novoEstado === "FECHANDO") ultimaDirecao = novoEstado;
-    let texto = novoEstado === "ABRINDO" ? "Abrindo... 🔼" : "Fechando... 🔽";
-    let cor = "#FFD700"; 
-    atualizarUI(texto, cor);
+    
+    let texto = novoEstado === "ABRINDO" ? "Abrindo..." : "Fechando...";
+    let cor = "#f59e0b"; // Laranja Warning
+    let icone = novoEstado === "ABRINDO" ? "ph-arrows-out-line-vertical" : "ph-arrows-in-line-vertical";
+    
+    atualizarUI(texto, cor, icone, true);
+    
     if (timerMovimento) clearTimeout(timerMovimento);
     timerMovimento = setTimeout(() => {
         (novoEstado === "ABRINDO") ? finalizarEstado("ABERTO") : finalizarEstado("FECHADO"); 
@@ -149,65 +148,51 @@ function iniciarAnimacao(novoEstado) {
 function pararAnimacao() {
     if (timerMovimento) clearTimeout(timerMovimento);
     ultimaDirecao = estadoAtual; estadoAtual = "PARADO";
-    atualizarUI("PARADO ✋", "#ff8800"); 
+    atualizarUI("Parado", "#f59e0b", "ph-hand-palm"); 
 }
 
 function finalizarEstado(estadoFinal) {
     estadoAtual = estadoFinal;
-    if (estadoFinal === "ABERTO") { atualizarUI("PORTÃO ABERTO 🔓", "#ff4444"); ultimaDirecao = "ABRINDO"; } 
-    else { atualizarUI("PORTÃO FECHADO 🔒", "#4CAF50"); ultimaDirecao = "FECHANDO"; }
+    if (estadoFinal === "ABERTO") { 
+        atualizarUI("Aberto", "#ef4444", "ph-lock-open"); // Vermelho = Atenção, está aberto
+        ultimaDirecao = "ABRINDO"; 
+    } else { 
+        atualizarUI("Fechado", "#10b981", "ph-lock-key"); // Verde = Seguro
+        ultimaDirecao = "FECHANDO"; 
+    }
 }
 
-// --- SSE (Ouvindo o Servidor) ---
+function atualizarUI(texto, cor, iconeNome, pulsando = false) {
+    statusText.innerText = texto; 
+    statusText.style.color = cor;
+    
+    statusIndicator.style.borderColor = cor;
+    statusIndicator.style.boxShadow = `0 0 20px ${cor}40`; // 40 = transparencia
+    
+    statusIcon.className = `ph ${iconeNome}`;
+    statusIcon.style.color = cor;
+    
+    if (pulsando) statusIndicator.classList.add('pulsing'); // Adicionar no CSS se quiser animar
+    else statusIndicator.classList.remove('pulsing');
+}
+
+// --- SSE ---
 function conectarSSE() {
     const evtSource = new EventSource('/events');
     evtSource.onmessage = function(event) {
         const msg = event.data;
         
-        // 1. Recebemos status REAL (Prioridade MÁXIMA)
-        if(msg === "ESTADO_REAL_FECHADO" || msg === "ESTADO_REAL_ABERTO") {
-            
-            if (emProcessoDeUpdate) {
-                emProcessoDeUpdate = false;
-                showToast("Firmware atualizado com sucesso!", "success");
-                const btn = document.querySelector('.btn-update');
-                btn.innerText = "☁️ Instalar Atualização"; btn.disabled = false;
-                updateSuccessCheck.classList.remove('hidden');
-                setTimeout(() => updateSuccessCheck.classList.add('hidden'), 10000);
-            }
-
-            // CORREÇÃO: Removemos a checagem "!movendo". 
-            // O sensor real tem prioridade sobre a animação simulada.
-            if(msg === "ESTADO_REAL_FECHADO") {
-                if (timerMovimento) clearTimeout(timerMovimento);
-                finalizarEstado("FECHADO");
-            } 
-            else if (msg === "ESTADO_REAL_ABERTO") {
-                if (timerMovimento) clearTimeout(timerMovimento);
-                finalizarEstado("ABERTO");
-            }
+        if(msg === "ESTADO_REAL_FECHADO") {
+            if (timerMovimento) clearTimeout(timerMovimento);
+            finalizarEstado("FECHADO");
+        } 
+        else if (msg === "ESTADO_REAL_ABERTO") {
+            if (timerMovimento) clearTimeout(timerMovimento);
+            finalizarEstado("ABERTO");
         }
-        
         else if (msg === "STATUS_ATUALIZANDO_SISTEMA") {
              emProcessoDeUpdate = true;
-             atualizarUI("ATUALIZANDO FIRMWARE... ☁️", "#00d2ff");
-             showToast("Download iniciado no Portão...", "info");
-        }
-        
-        else if (msg === "ERRO_ATUALIZACAO") {
-            emProcessoDeUpdate = false;
-            showToast("Falha na atualização do Firmware!", "error");
-            const btn = document.querySelector('.btn-update');
-            btn.innerText = "☁️ Tentar Novamente"; btn.disabled = false;
+             atualizarUI("Atualizando...", "#00d2ff", "ph-cloud-arrow-down");
         }
     };
-    
-    evtSource.onerror = function() {
-        console.log("Conexão SSE oscilou...");
-    };
-}
-
-function atualizarUI(texto, cor) {
-    statusText.innerText = texto; statusText.style.color = cor;
-    statusIndicator.style.backgroundColor = cor; statusIndicator.style.boxShadow = `0 0 15px ${cor}`;
 }
