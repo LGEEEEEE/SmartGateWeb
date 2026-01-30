@@ -1,7 +1,8 @@
 :root {
     --bg-color: #0f1115;
     --card-bg: rgba(30, 34, 45, 0.7);
-    --primary: #6366f1; /* Indigo moderno */
+    --primary: #6366f1;
+    /* Indigo moderno */
     --primary-glow: rgba(99, 102, 241, 0.4);
     --text-main: #ffffff;
     --text-muted: #94a3b8;
@@ -23,14 +24,19 @@ body {
 }
 
 .screen {
-    width: 100%; height: 100%;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     position: absolute;
     transition: opacity 0.4s ease;
 }
 
-.hidden { display: none !important; }
+.hidden {
+    display: none !important;
+}
 
 /* --- LOGIN CARD (GLASSMORPHISM) --- */
 .glass-card {
@@ -40,92 +46,182 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.1);
     padding: 40px 30px;
     border-radius: 24px;
-    width: 85%; max-width: 320px;
+    width: 85%;
+    max-width: 320px;
     text-align: center;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
 }
 
 .icon-header {
-    font-size: 3rem; color: var(--primary);
+    font-size: 3rem;
+    color: var(--primary);
     margin-bottom: 10px;
 }
 
-h1 { font-size: 1.5rem; margin: 10px 0 5px; font-weight: 600; }
-.subtitle { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 30px; }
+h1 {
+    font-size: 1.5rem;
+    margin: 10px 0 5px;
+    font-weight: 600;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 30px;
+}
 
 .input-group {
-    position: relative; margin-bottom: 15px;
+    position: relative;
+    margin-bottom: 15px;
 }
+
 .input-group i {
-    position: absolute; left: 15px; top: 50%;
-    transform: translateY(-50%); color: var(--text-muted);
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
 }
+
 input {
-    width: 100%; padding: 16px 16px 16px 45px;
+    width: 100%;
+    padding: 16px 16px 16px 45px;
     box-sizing: border-box;
-    border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
-    background: rgba(0,0,0,0.2); color: white;
-    font-size: 1rem; outline: none; transition: 0.3s;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+    color: white;
+    font-size: 1rem;
+    outline: none;
+    transition: 0.3s;
 }
-input:focus { border-color: var(--primary); background: rgba(0,0,0,0.4); }
+
+input:focus {
+    border-color: var(--primary);
+    background: rgba(0, 0, 0, 0.4);
+}
 
 button#btnLogin {
-    width: 100%; padding: 16px; margin-top: 20px;
-    border-radius: 12px; border: none;
-    background: var(--primary); color: white;
-    font-weight: 600; font-size: 1rem;
-    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%;
+    padding: 16px;
+    margin-top: 20px;
+    border-radius: 12px;
+    border: none;
+    background: var(--primary);
+    color: white;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
     box-shadow: 0 4px 15px var(--primary-glow);
     transition: transform 0.2s;
 }
-button#btnLogin:active { transform: scale(0.96); }
-.error-msg { color: var(--danger); font-size: 0.85rem; height: 20px; margin-top: 10px; }
+
+button#btnLogin:active {
+    transform: scale(0.96);
+}
+
+.error-msg {
+    color: var(--danger);
+    font-size: 0.85rem;
+    height: 20px;
+    margin-top: 10px;
+}
 
 /* --- APP UI --- */
 .top-bar {
-    position: absolute; top: 0; width: 100%; padding: 20px;
-    box-sizing: border-box; display: flex; justify-content: space-between;
-    align-items: center; z-index: 10;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
 }
-.user-info { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.1rem; }
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
 .btn-icon {
-    background: rgba(255,255,255,0.1); border: none;
-    width: 40px; height: 40px; border-radius: 50%;
-    color: var(--text-main); font-size: 1.2rem; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: var(--text-main);
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .main-content {
-    display: flex; flex-direction: column; align-items: center; gap: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
 }
 
 /* Status Ring */
-.status-display { text-align: center; }
+.status-display {
+    text-align: center;
+}
+
 .status-ring {
-    width: 80px; height: 80px; border-radius: 50%;
-    background: rgba(255,255,255,0.05);
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
     border: 2px solid #333;
     margin: 0 auto 15px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 2rem; color: #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: #555;
     transition: all 0.5s ease;
 }
-.last-user { font-size: 0.8rem; color: var(--text-muted); margin-top: 5px; }
+
+.last-user {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 5px;
+}
 
 /* Botão Power Moderno */
 #btnOpen {
-    width: 180px; height: 180px; border-radius: 50%;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
     background: linear-gradient(145deg, #1e222d, #14161f);
-    box-shadow:  10px 10px 30px #0b0c11, -10px -10px 30px #272c3d;
-    border: none; outline: none;
-    color: #444; font-size: 4rem; cursor: pointer;
+    box-shadow: 10px 10px 30px #0b0c11, -10px -10px 30px #272c3d;
+    border: none;
+    outline: none;
+    color: #444;
+    font-size: 4rem;
+    cursor: pointer;
     transition: all 0.3s;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
+
 #btnOpen:active {
     box-shadow: inset 10px 10px 20px #0b0c11, inset -10px -10px 20px #272c3d;
     transform: scale(0.98);
 }
+
 /* Estado Ativo do Botão */
 #btnOpen.active-power {
     color: var(--primary);
@@ -134,34 +230,168 @@ button#btnLogin:active { transform: scale(0.96); }
 
 /* Footer / Admin */
 .footer-options {
-    position: absolute; bottom: 30px; width: 100%; text-align: center;
+    position: absolute;
+    bottom: 30px;
+    width: 100%;
+    text-align: center;
 }
+
 summary {
-    list-style: none; color: var(--text-muted); font-size: 0.9rem;
-    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+    list-style: none;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
 }
+
 .admin-box {
-    background: #1a1d29; margin: 15px auto 0; padding: 20px;
-    width: 80%; max-width: 300px; border-radius: 16px;
-    border: 1px solid #333; text-align: left;
+    background: #1a1d29;
+    margin: 15px auto 0;
+    padding: 20px;
+    width: 80%;
+    max-width: 300px;
+    border-radius: 16px;
+    border: 1px solid #333;
+    text-align: left;
     animation: slideUp 0.3s;
 }
-.info-row { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 0.9rem; color: #888; }
-.badge { background: #333; padding: 2px 8px; border-radius: 4px; color: white; font-size: 0.75rem; }
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.badge {
+    background: #333;
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: white;
+    font-size: 0.75rem;
+}
 
 .btn-update {
-    width: 100%; padding: 12px; background: #333; color: white;
-    border: none; border-radius: 8px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%;
+    padding: 12px;
+    background: #333;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
 }
-.success-msg { color: var(--success); font-size: 0.9rem; margin-top: 10px; text-align: center; }
 
-@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.success-msg {
+    color: var(--success);
+    font-size: 0.9rem;
+    margin-top: 10px;
+    text-align: center;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 
 /* Toasts */
-#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100; }
+#toast-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+}
+
 .toast {
-    background: #1e222d; color: white; padding: 12px 20px; margin-bottom: 10px;
-    border-radius: 50px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-    display: flex; align-items: center; gap: 10px; border: 1px solid #333;
+    background: #1e222d;
+    color: white;
+    padding: 12px 20px;
+    margin-bottom: 10px;
+    border-radius: 50px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #333;
+}
+
+/* MANTENHA TODO O CSS ANTERIOR E ADICIONE ISTO NO FINAL */
+
+/* --- BARRA DE PROGRESSO --- */
+#progressContainer {
+    margin-top: 15px;
+    width: 100%;
+}
+
+.progress-label {
+    font-size: 0.8rem;
+    color: #00d2ff;
+    margin-bottom: 5px;
+    text-align: left;
+    animation: pulseText 1.5s infinite;
+}
+
+.progress-track {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    width: 100%;
+    /* Começa 100% mas usa background animado pra dar sensação de loading */
+    background: linear-gradient(45deg,
+            #00d2ff 25%,
+            #0077ff 25%,
+            #0077ff 50%,
+            #00d2ff 50%,
+            #00d2ff 75%,
+            #0077ff 75%,
+            #0077ff);
+    background-size: 20px 20px;
+    animation: moveStripes 1s linear infinite;
+    border-radius: 4px;
+}
+
+@keyframes moveStripes {
+    0% {
+        background-position: 0 0;
+    }
+
+    100% {
+        background-position: 20px 20px;
+    }
+}
+
+@keyframes pulseText {
+    0% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.6;
+    }
 }

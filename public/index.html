@@ -4,85 +4,66 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart Gate Pro</title>
-    
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-    
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
     <div id="toast-container"></div>
 
     <div id="login-screen" class="screen">
         <div class="glass-card">
-            <div class="icon-header">
-                <i class="ph ph-shield-check"></i>
-            </div>
+            <div class="icon-header"><i class="ph ph-shield-check"></i></div>
             <h1>Acesso Restrito</h1>
             <p class="subtitle">Identifique-se para continuar</p>
-            
             <div class="input-group">
                 <i class="ph ph-user"></i>
                 <input type="text" id="nameInput" placeholder="Seu Nome (Ex: Gustavo)">
             </div>
-
             <div class="input-group">
                 <i class="ph ph-lock-key"></i>
                 <input type="password" id="passwordInput" placeholder="Senha Mestre">
             </div>
-
-            <button onclick="fazerLogin()" id="btnLogin">
-                ENTRAR <i class="ph ph-arrow-right"></i>
-            </button>
+            <button onclick="fazerLogin()" id="btnLogin">ENTRAR <i class="ph ph-arrow-right"></i></button>
             <p id="loginError" class="error-msg"></p>
         </div>
     </div>
 
     <div id="app-screen" class="screen hidden">
         <div class="top-bar">
-            <div class="user-info">
-                <i class="ph ph-house-line"></i>
-                <span>Smart Home</span>
-            </div>
-            <button onclick="fazerLogout()" class="btn-icon">
-                <i class="ph ph-sign-out"></i>
-            </button>
+            <div class="user-info"><i class="ph ph-house-line"></i><span>Smart Home</span></div>
+            <button onclick="fazerLogout()" class="btn-icon"><i class="ph ph-sign-out"></i></button>
         </div>
 
         <div class="main-content">
             <div class="status-display">
-                <div id="statusIndicator" class="status-ring">
-                    <i id="statusIcon" class="ph ph-question"></i>
-                </div>
+                <div id="statusIndicator" class="status-ring"><i id="statusIcon" class="ph ph-question"></i></div>
                 <h2 id="statusText">Sincronizando...</h2>
                 <p id="lastUserText" class="last-user">...</p>
             </div>
 
             <div class="control-area">
-                <button id="btnOpen" onclick="abrirPortao()">
-                    <i class="ph ph-power"></i>
-                </button>
+                <button id="btnOpen" onclick="abrirPortao()"><i class="ph ph-power"></i></button>
                 <p>Toque para acionar</p>
             </div>
         </div>
 
         <div class="footer-options">
             <details>
-                <summary>
-                    <i class="ph ph-gear"></i> Configurações
-                </summary>
-                
+                <summary><i class="ph ph-gear"></i> Configurações</summary>
                 <div class="admin-box">
-                    <div class="info-row">
-                        <span>Versão</span>
-                        <span class="badge">v2.2</span>
-                    </div>
+                    <div class="info-row"><span>Versão</span><span class="badge">v3.0 (Turbo)</span></div>
                     
                     <button onclick="solicitarUpdate()" class="btn-update">
                         <i class="ph ph-cloud-arrow-up"></i> Atualizar Firmware
                     </button>
+
+                    <div id="progressContainer" class="hidden">
+                        <div class="progress-label">Baixando do GitHub...</div>
+                        <div class="progress-track">
+                            <div class="progress-bar-fill"></div>
+                        </div>
+                    </div>
                     
                     <div id="updateSuccessCheck" class="hidden success-msg">
                         <i class="ph ph-check-circle"></i> Atualizado!
@@ -90,9 +71,7 @@
                 </div>
             </details>
         </div>
-
     </div>
-
     <script src="app.js"></script>
 </body>
 </html>

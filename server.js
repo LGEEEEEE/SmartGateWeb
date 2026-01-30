@@ -17,7 +17,6 @@ const MQTT_PASS = process.env.MQTT_PASS;
 const APP_PASSWORD = process.env.APP_PASSWORD; 
 const NTFY_TOPIC = process.env.NTFY_TOPIC; 
 
-// Tópicos
 const TOPIC_COMMAND = "projeto_LG/casa/portao";
 const TOPIC_STATUS = "projeto_LG/casa/portao/status";
 
@@ -31,7 +30,6 @@ let timeoutComando = null;
 let activeSessions = {}; 
 let sseClients = [];
 
-// MQTT Conexão
 const client = mqtt.connect(MQTT_URL, {
     username: MQTT_USER, password: MQTT_PASS,
     protocol: 'mqtts', rejectUnauthorized: false
@@ -45,37 +43,44 @@ client.on('connect', () => {
 client.on('message', (topic, message) => {
     const msg = message.toString();
 
-    if (topic === TOPIC_COMMAND) {
-        const partes = msg.split('|');
-        if (partes.length >= 3 && partes[0] === "ABRIR_PORTAO_AGORA") {
-            ultimoComandoOrigem = `${partes[1]} (${partes[2]})`;
-            if (timeoutComando) clearTimeout(timeoutComando);
-            timeoutComando = setTimeout(() => { ultimoComandoOrigem = null; }, 40000);
-        }
-    }
-
+    // LOG EXTRA PARA DEBUG DE STATUS
     if (topic === TOPIC_STATUS) {
-        // Envia TUDO para o Front-end imediatamente (para a animação fluir)
+        if (msg === "STATUS_ATUALIZANDO_SISTEMA") {
+            console.log("\n========================================");
+            console.log("📥 ESP32 CONFIRMOU: ATUALIZAÇÃO INICIADA");
+            console.log("========================================\n");
+        } 
+        else if (msg === "ERRO_ATUALIZACAO") {
+            console.log("\n❌ ERRO CRÍTICO: ESP32 FALHOU NO UPDATE\n");
+        }
+        else if (msg !== ultimoEstadoConhecido) {
+            console.log(`🔄 Novo Status: ${msg}`);
+        }
+
+        // Envia para o Front
         sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
         
-        // Verifica se deve notificar no celular
         if (msg !== ultimoEstadoConhecido) {
             ultimoEstadoConhecido = msg;
             verificarENotificar(msg);
         }
     }
+
+    if (topic === TOPIC_COMMAND) {
+        const partes = msg.split('|');
+        if (partes[0] === "ABRIR_PORTAO_AGORA") {
+            ultimoComandoOrigem = `${partes[1]} (${partes[2]})`;
+            if (timeoutComando) clearTimeout(timeoutComando);
+            timeoutComando = setTimeout(() => { ultimoComandoOrigem = null; }, 40000);
+        }
+    }
 });
 
 function verificarENotificar(estado) {
-    // SÓ NOTIFICA SE FOR REAL (Blindagem contra estados intermediários)
     if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") return;
-    
-    // Se o estado for igual ao último notificado, ignora (evita flood)
     if (estado === ultimoEstadoNotificado) return;
     
     const agora = Date.now();
-    // DIMINUÍDO PARA 1 SEGUNDO (Era 3s)
-    // Se você abrir e fechar em 1.5s, ele vai notificar os dois.
     if (agora - ultimoTempoNotificacao < 1000) return;
 
     let titulo = "", mensagem = "", tags = [];
@@ -102,7 +107,6 @@ function verificarENotificar(estado) {
     }
 }
 
-// --- ROTAS ---
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -145,11 +149,18 @@ app.post('/api/acionar', (req, res) => {
     res.json({ success: true });
 });
 
+// LOG VISUAL DE UPDATE
 app.post('/api/admin/update', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeSessions[token]) return res.status(403).json({ error: "Acesso Negado." });
     
+    console.log("\n========================================");
+    console.log("🚀 COMANDO ADMIN: INICIANDO UPDATE OTA");
+    console.log("========================================\n");
+    
     client.publish(TOPIC_COMMAND, "ATUALIZAR_FIRMWARE");
+    
+    // Feedback imediato pro front
     sseClients.forEach(c => c.res.write(`data: STATUS_ATUALIZANDO_SISTEMA\n\n`));
     res.json({ success: true });
 });
