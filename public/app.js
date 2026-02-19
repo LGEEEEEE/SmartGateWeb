@@ -7,11 +7,11 @@ const btnOpen = document.getElementById('btnOpen');
 const updateSuccessCheck = document.getElementById('updateSuccessCheck');
 const progressContainer = document.getElementById('progressContainer');
 
-// --- VARIÁVEIS DE ESTADO ---
+// --- VARIÁVEIS DE ESTADO PORTÃO ---
 let estadoAtual = "DESCONHECIDO"; 
 let timerMovimento = null;
 const TEMPO_CICLO = 15000; // 15 Segundos
-let ultimaDirecao = "FECHANDO"; // Memória para saber para onde inverter
+let ultimaDirecao = "FECHANDO"; 
 let emProcessoDeUpdate = false; 
 
 // --- INICIALIZAÇÃO ---
@@ -73,7 +73,7 @@ function mostrarApp() {
     conectarSSE();
     fetch('/api/acionar', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
-        body: JSON.stringify({ comando_customizado: "CHECAR_STATUS" }) 
+        body: JSON.stringify({ dispositivo: "portao", comando_customizado: "CHECAR_STATUS" }) 
     }).catch(e => console.log("Erro inicial"));
 }
 
@@ -82,21 +82,34 @@ function fazerLogout() {
     location.reload();
 }
 
-// --- COMANDO ---
+// --- CONTROLES PORTÃO ---
 async function abrirPortao() {
     btnOpen.classList.add('active-power');
     if(navigator.vibrate) navigator.vibrate(50);
     setTimeout(() => btnOpen.classList.remove('active-power'), 300);
 
-    // Aplica a lógica visual corrigida
     gerenciarLogicaClique();
     
     try {
         await fetch('/api/acionar', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') }
+            headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
+            body: JSON.stringify({ dispositivo: "portao" })
         });
     } catch (e) { showToast("Erro ao enviar comando", "error"); }
+}
+
+// --- CONTROLES BOMBA ---
+async function controlarBomba(comando) {
+    if(navigator.vibrate) navigator.vibrate(50);
+    try {
+        await fetch('/api/acionar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
+            body: JSON.stringify({ dispositivo: "bomba", comando_customizado: comando })
+        });
+        showToast(comando === "LIGAR_BOMBA" ? "Ligando bomba..." : "Desligando bomba...", "info");
+    } catch (e) { showToast("Erro ao comunicar com a bomba", "error"); }
 }
 
 async function solicitarUpdate() {
@@ -112,37 +125,19 @@ async function solicitarUpdate() {
     }
 }
 
-// ==========================================================
-// LÓGICA DE MOVIMENTO COM INVERSÃO (O PULO DO GATO)
-// ==========================================================
-
+// --- LÓGICA DE MOVIMENTO COM INVERSÃO PORTÃO ---
 function gerenciarLogicaClique() {
-    // 1. Se está MOVENDO -> Vira PARADO
     if (estadoAtual === "ABRINDO" || estadoAtual === "FECHANDO") {
-        // Salva a direção que estava indo antes de parar
         ultimaDirecao = estadoAtual;
         pararAnimacao();
-    }
-    
-    // 2. Se está PARADO -> INVERTE a última direção
-    else if (estadoAtual === "PARADO") {
-        if (ultimaDirecao === "ABRINDO") {
-            iniciarAnimacao("FECHANDO"); // Se estava abrindo, agora fecha
-        } else {
-            iniciarAnimacao("ABRINDO"); // Se estava fechando, agora abre
-        }
-    }
-    
-    // 3. Extremos (Fechado/Aberto)
-    else if (estadoAtual === "FECHADO") {
+    } else if (estadoAtual === "PARADO") {
+        if (ultimaDirecao === "ABRINDO") iniciarAnimacao("FECHANDO");
+        else iniciarAnimacao("ABRINDO");
+    } else if (estadoAtual === "FECHADO") {
         iniciarAnimacao("ABRINDO");
-    }
-    else if (estadoAtual === "ABERTO") {
+    } else if (estadoAtual === "ABERTO") {
         iniciarAnimacao("FECHANDO");
-    }
-    
-    // Fallback (primeiro uso)
-    else {
+    } else {
         iniciarAnimacao("ABRINDO");
     }
 }
@@ -151,7 +146,6 @@ function iniciarAnimacao(novoEstado) {
     if (timerMovimento) clearTimeout(timerMovimento);
     
     estadoAtual = novoEstado;
-    // Atualiza a ultimaDirecao agora também, para garantir sincronia
     ultimaDirecao = novoEstado; 
     
     let texto = novoEstado === "ABRINDO" ? "Abrindo... (15s)" : "Fechando... (15s)";
@@ -176,10 +170,10 @@ function finalizarEstado(estadoFinal) {
     estadoAtual = estadoFinal;
     if (estadoFinal === "ABERTO") { 
         atualizarUI("Aberto", "#ef4444", "ph-lock-open"); 
-        ultimaDirecao = "ABRINDO"; // Garante que se clicar, vai fechar
+        ultimaDirecao = "ABRINDO"; 
     } else { 
         atualizarUI("Fechado", "#10b981", "ph-lock-key"); 
-        ultimaDirecao = "FECHANDO"; // Garante que se clicar, vai abrir
+        ultimaDirecao = "FECHANDO"; 
     }
 }
 
@@ -195,34 +189,41 @@ function atualizarUI(texto, cor, iconeNome, pulsando = false) {
     else statusIndicator.classList.remove('pulsing');
 }
 
-// --- SSE (IGNORANDO "ABERTO" ENQUANTO ANIMA) ---
+// --- SSE EVENTOS ---
 function conectarSSE() {
     const evtSource = new EventSource('/events');
     evtSource.onmessage = function(event) {
         const msg = event.data;
         
-        // STATUS REAL:
-        if(msg === "ESTADO_REAL_FECHADO") {
-            // Se o imã colou, fechou mesmo. Respeitamos.
+        // STATUS DA BOMBA:
+        if (msg === "BOMBA_LIGADA") {
+            document.getElementById('bombaStatusText').innerText = "Ligada (15 min)";
+            document.getElementById('bombaStatusText').style.color = "#10b981"; 
+            document.getElementById('bombaIndicator').style.borderColor = "#10b981";
+            document.getElementById('bombaIndicator').style.boxShadow = "0 0 20px rgba(16, 185, 129, 0.4)";
+            document.getElementById('bombaIcon').style.color = "#10b981";
+        }
+        else if (msg === "BOMBA_DESLIGADA") {
+            document.getElementById('bombaStatusText').innerText = "Desligada";
+            document.getElementById('bombaStatusText').style.color = "#94a3b8"; 
+            document.getElementById('bombaIndicator').style.borderColor = "#333";
+            document.getElementById('bombaIndicator').style.boxShadow = "none";
+            document.getElementById('bombaIcon').style.color = "#555";
+        }
+        
+        // STATUS REAL DO PORTÃO:
+        else if(msg === "ESTADO_REAL_FECHADO") {
             if (timerMovimento) clearTimeout(timerMovimento);
             finalizarEstado("FECHADO");
             verificarFimUpdate();
         } 
         else if (msg === "ESTADO_REAL_ABERTO") {
-            // SE ESTAMOS CONTANDO TEMPO (ANIMANDO), IGNORAMOS O SENSOR ABERTO
-            // (Porque o sensor solta logo no início, mas queremos ver a animação até o fim ou parar)
-            if (timerMovimento) {
-                return; 
-            }
-            
-            // Se não estamos animando (ex: atualizou a pagina), aceitamos que está aberto
-            // Mas só se não estivermos no estado PARADO (para não sobrescrever a parada manual)
-            if (estadoAtual !== "PARADO") {
-                finalizarEstado("ABERTO");
-            }
+            if (timerMovimento) return; 
+            if (estadoAtual !== "PARADO") finalizarEstado("ABERTO");
             verificarFimUpdate();
         }
         
+        // ATUALIZAÇÃO FIRMWARE:
         else if (msg === "STATUS_ATUALIZANDO_SISTEMA") {
              emProcessoDeUpdate = true;
              progressContainer.classList.remove('hidden');

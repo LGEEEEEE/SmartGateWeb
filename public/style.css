@@ -2,7 +2,6 @@
     --bg-color: #0f1115;
     --card-bg: rgba(30, 34, 45, 0.7);
     --primary: #6366f1;
-    /* Indigo moderno */
     --primary-glow: rgba(99, 102, 241, 0.4);
     --text-main: #ffffff;
     --text-muted: #94a3b8;
@@ -38,7 +37,7 @@ body {
     display: none !important;
 }
 
-/* --- LOGIN CARD (GLASSMORPHISM) --- */
+/* --- LOGIN CARD --- */
 .glass-card {
     background: var(--card-bg);
     backdrop-filter: blur(12px);
@@ -58,23 +57,10 @@ body {
     margin-bottom: 10px;
 }
 
-h1 {
-    font-size: 1.5rem;
-    margin: 10px 0 5px;
-    font-weight: 600;
-}
+h1 { font-size: 1.5rem; margin: 10px 0 5px; font-weight: 600; }
+.subtitle { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 30px; }
 
-.subtitle {
-    color: var(--text-muted);
-    font-size: 0.9rem;
-    margin-bottom: 30px;
-}
-
-.input-group {
-    position: relative;
-    margin-bottom: 15px;
-}
-
+.input-group { position: relative; margin-bottom: 15px; }
 .input-group i {
     position: absolute;
     left: 15px;
@@ -96,10 +82,7 @@ input {
     transition: 0.3s;
 }
 
-input:focus {
-    border-color: var(--primary);
-    background: rgba(0, 0, 0, 0.4);
-}
+input:focus { border-color: var(--primary); background: rgba(0, 0, 0, 0.4); }
 
 button#btnLogin {
     width: 100%;
@@ -120,18 +103,11 @@ button#btnLogin {
     transition: transform 0.2s;
 }
 
-button#btnLogin:active {
-    transform: scale(0.96);
-}
+button#btnLogin:active { transform: scale(0.96); }
 
-.error-msg {
-    color: var(--danger);
-    font-size: 0.85rem;
-    height: 20px;
-    margin-top: 10px;
-}
+.error-msg { color: var(--danger); font-size: 0.85rem; height: 20px; margin-top: 10px; }
 
-/* --- APP UI --- */
+/* --- APP UI (TOP BAR) --- */
 .top-bar {
     position: absolute;
     top: 0;
@@ -144,13 +120,7 @@ button#btnLogin:active {
     z-index: 10;
 }
 
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    font-size: 1.1rem;
-}
+.user-info { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.1rem; }
 
 .btn-icon {
     background: rgba(255, 255, 255, 0.1);
@@ -166,67 +136,101 @@ button#btnLogin:active {
     justify-content: center;
 }
 
-.main-content {
+/* --- LAYOUT DO HUB (NOVO) --- */
+.hub-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    width: 100%;
+    max-width: 800px;
+    padding: 0 20px;
+    box-sizing: border-box;
+    margin-top: 40px; /* Ajuste para espaçar da barra do topo */
+}
+
+.device-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 25px 20px;
+    width: 100%;
+    max-width: 320px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 40px;
+    gap: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
-/* Status Ring */
-.status-display {
+.device-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.3rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+/* Rings de Status nos cartões */
+.status-display.small {
     text-align: center;
+    margin-bottom: 10px;
 }
 
 .status-ring {
-    width: 80px;
-    height: 80px;
+    width: 70px;
+    height: 70px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.05);
     border: 2px solid #333;
-    margin: 0 auto 15px;
+    margin: 0 auto 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2rem;
+    font-size: 1.8rem;
     color: #555;
     transition: all 0.5s ease;
 }
 
-.last-user {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-top: 5px;
-}
+.status-display.small p { margin: 0; font-weight: 600; font-size: 1rem; }
 
-/* Botão Power Moderno */
-#btnOpen {
-    width: 180px;
-    height: 180px;
-    border-radius: 50%;
-    background: linear-gradient(145deg, #1e222d, #14161f);
-    box-shadow: 10px 10px 30px #0b0c11, -10px -10px 30px #272c3d;
+/* Botões Modernos dos Cartões */
+.btn-device {
+    width: 100%;
+    padding: 16px;
+    border-radius: 12px;
     border: none;
-    outline: none;
-    color: #444;
-    font-size: 4rem;
+    color: white;
+    font-weight: 600;
+    font-size: 1rem;
     cursor: pointer;
-    transition: all 0.3s;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 8px;
+    transition: transform 0.2s, filter 0.2s;
 }
 
-#btnOpen:active {
-    box-shadow: inset 10px 10px 20px #0b0c11, inset -10px -10px 20px #272c3d;
-    transform: scale(0.98);
+.btn-device:active { transform: scale(0.96); }
+
+/* Adaptação do Botão do Portão */
+#btnOpen.btn-gate {
+    background: var(--primary);
+    box-shadow: 0 4px 15px var(--primary-glow);
 }
 
-/* Estado Ativo do Botão */
 #btnOpen.active-power {
-    color: var(--primary);
-    text-shadow: 0 0 20px var(--primary);
+    filter: brightness(1.2);
+    transform: scale(0.96);
 }
+
+/* Controles da Bomba */
+.bomba-controls { display: flex; gap: 10px; width: 100%; }
+.btn-on { background: var(--success); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
+.btn-off { background: var(--danger); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
 
 /* Footer / Admin */
 .footer-options {
@@ -267,13 +271,7 @@ summary {
     color: #888;
 }
 
-.badge {
-    background: #333;
-    padding: 2px 8px;
-    border-radius: 4px;
-    color: white;
-    font-size: 0.75rem;
-}
+.badge { background: #333; padding: 2px 8px; border-radius: 4px; color: white; font-size: 0.75rem; }
 
 .btn-update {
     width: 100%;
@@ -289,23 +287,11 @@ summary {
     gap: 8px;
 }
 
-.success-msg {
-    color: var(--success);
-    font-size: 0.9rem;
-    margin-top: 10px;
-    text-align: center;
-}
+.success-msg { color: var(--success); font-size: 0.9rem; margin-top: 10px; text-align: center; }
 
 @keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* Toasts */
@@ -330,68 +316,26 @@ summary {
     border: 1px solid #333;
 }
 
-/* MANTENHA TODO O CSS ANTERIOR E ADICIONE ISTO NO FINAL */
-
-/* --- BARRA DE PROGRESSO --- */
-#progressContainer {
-    margin-top: 15px;
-    width: 100%;
-}
-
-.progress-label {
-    font-size: 0.8rem;
-    color: #00d2ff;
-    margin-bottom: 5px;
-    text-align: left;
-    animation: pulseText 1.5s infinite;
-}
-
-.progress-track {
-    width: 100%;
-    height: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    overflow: hidden;
-    position: relative;
-}
-
+/* Barra de Progresso */
+#progressContainer { margin-top: 15px; width: 100%; }
+.progress-label { font-size: 0.8rem; color: #00d2ff; margin-bottom: 5px; text-align: left; animation: pulseText 1.5s infinite; }
+.progress-track { width: 100%; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative; }
 .progress-bar-fill {
     height: 100%;
     width: 100%;
-    /* Começa 100% mas usa background animado pra dar sensação de loading */
-    background: linear-gradient(45deg,
-            #00d2ff 25%,
-            #0077ff 25%,
-            #0077ff 50%,
-            #00d2ff 50%,
-            #00d2ff 75%,
-            #0077ff 75%,
-            #0077ff);
+    background: linear-gradient(45deg, #00d2ff 25%, #0077ff 25%, #0077ff 50%, #00d2ff 50%, #00d2ff 75%, #0077ff 75%, #0077ff);
     background-size: 20px 20px;
     animation: moveStripes 1s linear infinite;
     border-radius: 4px;
 }
 
 @keyframes moveStripes {
-    0% {
-        background-position: 0 0;
-    }
-
-    100% {
-        background-position: 20px 20px;
-    }
+    0% { background-position: 0 0; }
+    100% { background-position: 20px 20px; }
 }
 
 @keyframes pulseText {
-    0% {
-        opacity: 0.6;
-    }
-
-    50% {
-        opacity: 1;
-    }
-
-    100% {
-        opacity: 0.6;
-    }
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
 }

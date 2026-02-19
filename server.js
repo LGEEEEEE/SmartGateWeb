@@ -10,18 +10,23 @@ app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
 
-// Variáveis
+// --- VARIÁVEIS DE AMBIENTE ---
 const MQTT_URL = process.env.MQTT_URL;
 const MQTT_USER = process.env.MQTT_USER;
 const MQTT_PASS = process.env.MQTT_PASS;
 const APP_PASSWORD = process.env.APP_PASSWORD; 
 const NTFY_TOPIC = process.env.NTFY_TOPIC; 
 
+// --- TÓPICOS SEPARADOS E PADRONIZADOS ---
+const TOPIC_STATUS_PORTAO = "projeto_LG/casa/portao/status";
+const TOPIC_STATUS_BOMBA = "projeto_LG/casa/bomba/status"; 
 const TOPIC_COMMAND = "projeto_LG/casa/portao";
-const TOPIC_STATUS = "projeto_LG/casa/portao/status";
+const TOPIC_COMMAND_BOMBA = "projeto_LG/casa/bomba/cmd";
 
-// --- MEMÓRIA ---
-let ultimoEstadoConhecido = "AGUARDANDO"; 
+// --- MEMÓRIA E ESTADOS ---
+let ultimoEstadoPortao = "AGUARDANDO"; 
+let ultimoEstadoBomba = "AGUARDANDO"; 
+
 let ultimoEstadoNotificado = ""; 
 let ultimoTempoNotificacao = 0;
 let ultimoComandoOrigem = null; 
@@ -30,43 +35,47 @@ let timeoutComando = null;
 let activeSessions = {}; 
 let sseClients = [];
 
+// --- CONEXÃO MQTT ---
 const client = mqtt.connect(MQTT_URL, {
-    username: MQTT_USER, password: MQTT_PASS,
-    protocol: 'mqtts', rejectUnauthorized: false
+    username: MQTT_USER, 
+    password: MQTT_PASS,
+    protocol: 'mqtts', 
+    rejectUnauthorized: false
 });
 
 client.on('connect', () => {
-    console.log("✅ MQTT Conectado");
-    client.subscribe([TOPIC_STATUS, TOPIC_COMMAND]);
+    console.log("✅ MQTT Conectado ao HiveMQ");
+    client.subscribe([TOPIC_STATUS_PORTAO, TOPIC_STATUS_BOMBA, TOPIC_COMMAND]);
 });
 
 client.on('message', (topic, message) => {
     const msg = message.toString();
 
-    // LOG EXTRA PARA DEBUG DE STATUS
-    if (topic === TOPIC_STATUS) {
-        if (msg === "STATUS_ATUALIZANDO_SISTEMA") {
-            console.log("\n========================================");
-            console.log("📥 ESP32 CONFIRMOU: ATUALIZAÇÃO INICIADA");
-            console.log("========================================\n");
-        } 
-        else if (msg === "ERRO_ATUALIZACAO") {
-            console.log("\n❌ ERRO CRÍTICO: ESP32 FALHOU NO UPDATE\n");
-        }
-        else if (msg !== ultimoEstadoConhecido) {
-            console.log(`🔄 Novo Status: ${msg}`);
-        }
+    // LÓGICA DE STATUS DO PORTÃO
+    if (topic === TOPIC_STATUS_PORTAO) {
+        if (msg.includes("BOMBA")) return; // Prevenção contra sujeira de tópicos antigos
 
-        // Envia para o Front
-        sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
-        
-        if (msg !== ultimoEstadoConhecido) {
-            ultimoEstadoConhecido = msg;
+        if (msg === "STATUS_ATUALIZANDO_SISTEMA" || msg === "ERRO_ATUALIZACAO") {
+            console.log(`\nOTA PORTÃO: ${msg}\n`);
+            sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
+        }
+        else if (msg !== ultimoEstadoPortao) {
+            console.log(`🚪 Status Portão: ${msg}`);
+            ultimoEstadoPortao = msg;
+            sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
             verificarENotificar(msg);
         }
     }
-
-    if (topic === TOPIC_COMMAND) {
+    // LÓGICA DE STATUS DA BOMBA
+    else if (topic === TOPIC_STATUS_BOMBA) {
+        if (msg !== ultimoEstadoBomba) {
+            console.log(`💧 Status Bomba: ${msg}`);
+            ultimoEstadoBomba = msg;
+            sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
+        }
+    }
+    // RASTREIO DE QUEM ABRIU O PORTÃO
+    else if (topic === TOPIC_COMMAND) {
         const partes = msg.split('|');
         if (partes[0] === "ABRIR_PORTAO_AGORA") {
             ultimoComandoOrigem = `${partes[1]} (${partes[2]})`;
@@ -76,6 +85,7 @@ client.on('message', (topic, message) => {
     }
 });
 
+// --- SISTEMA DE NOTIFICAÇÕES PUSH (NTFY) ---
 function verificarENotificar(estado) {
     if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") return;
     if (estado === ultimoEstadoNotificado) return;
@@ -103,21 +113,30 @@ function verificarENotificar(estado) {
         axios.post('https://ntfy.sh/', {
             topic: NTFY_TOPIC, title: titulo, message: mensagem,
             priority: 3, tags: tags, click: "https://smartgateweb.onrender.com"
-        }).catch(e => console.error("Erro ntfy"));
+        }).catch(e => console.error("Erro ao enviar notificação push via ntfy"));
     }
 }
 
+// --- ROTAS DA API ---
+
+// 1. Server-Sent Events (SSE) para atualização em tempo real
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
+    
     const id = Date.now();
     sseClients.push({ id, res });
-    res.write(`data: ${ultimoEstadoConhecido}\n\n`);
+    
+    // Envia o último status conhecido imediatamente ao conectar
+    res.write(`data: ${ultimoEstadoPortao}\n\n`);
+    res.write(`data: ${ultimoEstadoBomba}\n\n`);
+    
     req.on('close', () => { sseClients = sseClients.filter(c => c.id !== id); });
 });
 
+// 2. Autenticação
 app.post('/api/login', (req, res) => {
     const { password, name } = req.body; 
     if (password === APP_PASSWORD) {
@@ -131,6 +150,7 @@ app.post('/api/login', (req, res) => {
     }
 });
 
+// 3. Central de Acionamento (Portão e Bomba)
 app.post('/api/acionar', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeSessions[token]) return res.status(403).json({ error: "Sessão Expirada." });
@@ -141,28 +161,34 @@ app.post('/api/acionar', (req, res) => {
     if (userAgent.includes("Android")) device = "Android";
     else if (userAgent.includes("iPhone")) device = "iPhone";
 
+    const dispositivo = req.body.dispositivo || "portao"; 
     const acao = req.body.comando_customizado || "ABRIR_PORTAO_AGORA";
-    const payload = `${acao}|${usuarioNome}|${device}`;
-    client.publish(TOPIC_COMMAND, payload);
+
+    // LÓGICA SEPARADA: Bomba x Portão
+    if (dispositivo === "bomba") {
+        // Envia comando limpo (ex: LIGAR_BOMBA)
+        client.publish(TOPIC_COMMAND_BOMBA, acao);
+        console.log(`💧 Comando Bomba: [${acao}] por ${usuarioNome} (${device})`);
+    } else {
+        // Envia comando com metadados para o portão
+        const payload = `${acao}|${usuarioNome}|${device}`;
+        client.publish(TOPIC_COMMAND, payload);
+        console.log(`📤 Comando Portão: [${acao}] de: ${usuarioNome} (${device})`);
+    }
     
-    console.log(`📤 Ação de: ${usuarioNome} (${device})`);
     res.json({ success: true });
 });
 
-// LOG VISUAL DE UPDATE
+// 4. OTA Firmware Update
 app.post('/api/admin/update', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeSessions[token]) return res.status(403).json({ error: "Acesso Negado." });
     
-    console.log("\n========================================");
-    console.log("🚀 COMANDO ADMIN: INICIANDO UPDATE OTA");
-    console.log("========================================\n");
-    
+    console.log("\n🚀 OTA PORTÃO SOLICITADO\n");
     client.publish(TOPIC_COMMAND, "ATUALIZAR_FIRMWARE");
-    
-    // Feedback imediato pro front
     sseClients.forEach(c => c.res.write(`data: STATUS_ATUALIZANDO_SISTEMA\n\n`));
     res.json({ success: true });
 });
 
-app.listen(PORT, () => console.log(`🚀 Smart Gate V3 na porta ${PORT}`));
+// --- INICIALIZAÇÃO ---
+app.listen(PORT, () => console.log(`🚀 Smart Home Hub rodando na porta ${PORT}`));

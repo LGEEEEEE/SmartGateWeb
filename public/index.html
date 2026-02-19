@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Gate Pro</title>
+    <title>Smart Home Hub</title>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -35,16 +35,32 @@
             <button onclick="fazerLogout()" class="btn-icon"><i class="ph ph-sign-out"></i></button>
         </div>
 
-        <div class="main-content">
-            <div class="status-display">
-                <div id="statusIndicator" class="status-ring"><i id="statusIcon" class="ph ph-question"></i></div>
-                <h2 id="statusText">Sincronizando...</h2>
-                <p id="lastUserText" class="last-user">...</p>
+        <div class="main-content hub-grid">
+            <div class="device-card">
+                <h3><i class="ph ph-garage"></i> Portão</h3>
+                <div class="status-display small">
+                    <div id="statusIndicator" class="status-ring"><i id="statusIcon" class="ph ph-question"></i></div>
+                    <p id="statusText">Sincronizando...</p>
+                </div>
+                <button id="btnOpen" class="btn-device btn-gate" onclick="abrirPortao()">
+                    <i class="ph ph-power"></i> Acionar Portão
+                </button>
             </div>
 
-            <div class="control-area">
-                <button id="btnOpen" onclick="abrirPortao()"><i class="ph ph-power"></i></button>
-                <p>Toque para acionar</p>
+            <div class="device-card">
+                <h3><i class="ph ph-drop"></i> Bomba D'água</h3>
+                <div class="status-display small">
+                    <div id="bombaIndicator" class="status-ring"><i id="bombaIcon" class="ph ph-power"></i></div>
+                    <p id="bombaStatusText">Desligada</p>
+                </div>
+                <div class="bomba-controls">
+                    <button class="btn-device btn-on" onclick="controlarBomba('LIGAR_BOMBA')">
+                        <i class="ph ph-play"></i> Ligar
+                    </button>
+                    <button class="btn-device btn-off" onclick="controlarBomba('DESLIGAR_BOMBA')">
+                        <i class="ph ph-stop"></i> Desligar
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -52,7 +68,7 @@
             <details>
                 <summary><i class="ph ph-gear"></i> Configurações</summary>
                 <div class="admin-box">
-                    <div class="info-row"><span>Versão</span><span class="badge">v3.0 (Turbo)</span></div>
+                    <div class="info-row"><span>Versão</span><span class="badge">v3.1 (Hub)</span></div>
                     
                     <button onclick="solicitarUpdate()" class="btn-update">
                         <i class="ph ph-cloud-arrow-up"></i> Atualizar Firmware
