@@ -146,7 +146,7 @@ button#btnLogin:active { transform: scale(0.96); }
     max-width: 800px;
     padding: 0 20px;
     box-sizing: border-box;
-    margin-top: 40px; /* Ajuste para espaçar da barra do topo */
+    margin-top: 40px;
 }
 
 .device-card {
@@ -272,6 +272,14 @@ summary {
 }
 
 .badge { background: #333; padding: 2px 8px; border-radius: 4px; color: white; font-size: 0.75rem; }
+
+/* Botoes de Update Independentes */
+.update-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 15px;
+}
 
 .btn-update {
     width: 100%;

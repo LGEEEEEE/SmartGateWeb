@@ -51,13 +51,11 @@ client.on('connect', () => {
 client.on('message', (topic, message) => {
     const msg = message.toString();
 
-    // LÓGICA DE STATUS DO PORTÃO
     if (topic === TOPIC_STATUS_PORTAO) {
-        if (msg.includes("BOMBA")) return; // Prevenção contra sujeira de tópicos antigos
-
+        if (msg.includes("BOMBA")) return; 
         if (msg === "STATUS_ATUALIZANDO_SISTEMA" || msg === "ERRO_ATUALIZACAO") {
             console.log(`\nOTA PORTÃO: ${msg}\n`);
-            sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
+            sseClients.forEach(c => c.res.write(`data: PORTAO_${msg}\n\n`));
         }
         else if (msg !== ultimoEstadoPortao) {
             console.log(`🚪 Status Portão: ${msg}`);
@@ -66,15 +64,17 @@ client.on('message', (topic, message) => {
             verificarENotificar(msg);
         }
     }
-    // LÓGICA DE STATUS DA BOMBA
     else if (topic === TOPIC_STATUS_BOMBA) {
-        if (msg !== ultimoEstadoBomba) {
+        if (msg === "STATUS_ATUALIZANDO_BOMBA" || msg === "ERRO_ATUALIZACAO_BOMBA") {
+            console.log(`\nOTA BOMBA: ${msg}\n`);
+            sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
+        }
+        else if (msg !== ultimoEstadoBomba) {
             console.log(`💧 Status Bomba: ${msg}`);
             ultimoEstadoBomba = msg;
             sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
         }
     }
-    // RASTREIO DE QUEM ABRIU O PORTÃO
     else if (topic === TOPIC_COMMAND) {
         const partes = msg.split('|');
         if (partes[0] === "ABRIR_PORTAO_AGORA") {
@@ -85,7 +85,6 @@ client.on('message', (topic, message) => {
     }
 });
 
-// --- SISTEMA DE NOTIFICAÇÕES PUSH (NTFY) ---
 function verificarENotificar(estado) {
     if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") return;
     if (estado === ultimoEstadoNotificado) return;
@@ -117,9 +116,6 @@ function verificarENotificar(estado) {
     }
 }
 
-// --- ROTAS DA API ---
-
-// 1. Server-Sent Events (SSE) para atualização em tempo real
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -129,14 +125,12 @@ app.get('/events', (req, res) => {
     const id = Date.now();
     sseClients.push({ id, res });
     
-    // Envia o último status conhecido imediatamente ao conectar
     res.write(`data: ${ultimoEstadoPortao}\n\n`);
     res.write(`data: ${ultimoEstadoBomba}\n\n`);
     
     req.on('close', () => { sseClients = sseClients.filter(c => c.id !== id); });
 });
 
-// 2. Autenticação
 app.post('/api/login', (req, res) => {
     const { password, name } = req.body; 
     if (password === APP_PASSWORD) {
@@ -150,7 +144,6 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-// 3. Central de Acionamento (Portão e Bomba)
 app.post('/api/acionar', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeSessions[token]) return res.status(403).json({ error: "Sessão Expirada." });
@@ -164,13 +157,10 @@ app.post('/api/acionar', (req, res) => {
     const dispositivo = req.body.dispositivo || "portao"; 
     const acao = req.body.comando_customizado || "ABRIR_PORTAO_AGORA";
 
-    // LÓGICA SEPARADA: Bomba x Portão
     if (dispositivo === "bomba") {
-        // Envia comando limpo (ex: LIGAR_BOMBA)
         client.publish(TOPIC_COMMAND_BOMBA, acao);
         console.log(`💧 Comando Bomba: [${acao}] por ${usuarioNome} (${device})`);
     } else {
-        // Envia comando com metadados para o portão
         const payload = `${acao}|${usuarioNome}|${device}`;
         client.publish(TOPIC_COMMAND, payload);
         console.log(`📤 Comando Portão: [${acao}] de: ${usuarioNome} (${device})`);
@@ -179,16 +169,21 @@ app.post('/api/acionar', (req, res) => {
     res.json({ success: true });
 });
 
-// 4. OTA Firmware Update
 app.post('/api/admin/update', (req, res) => {
     const token = req.headers['authorization'];
     if (!activeSessions[token]) return res.status(403).json({ error: "Acesso Negado." });
     
-    console.log("\n🚀 OTA PORTÃO SOLICITADO\n");
-    client.publish(TOPIC_COMMAND, "ATUALIZAR_FIRMWARE");
-    sseClients.forEach(c => c.res.write(`data: STATUS_ATUALIZANDO_SISTEMA\n\n`));
+    const dispositivo = req.body.dispositivo;
+
+    if (dispositivo === "bomba") {
+        console.log("\n🚀 OTA BOMBA SOLICITADO\n");
+        client.publish(TOPIC_COMMAND_BOMBA, "ATUALIZAR_FIRMWARE");
+    } else {
+        console.log("\n🚀 OTA PORTÃO SOLICITADO\n");
+        client.publish(TOPIC_COMMAND, "ATUALIZAR_FIRMWARE");
+    }
+    
     res.json({ success: true });
 });
 
-// --- INICIALIZAÇÃO ---
 app.listen(PORT, () => console.log(`🚀 Smart Home Hub rodando na porta ${PORT}`));

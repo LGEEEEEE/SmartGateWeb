@@ -1,313 +1,189 @@
-/*
-  ARQUIVO: ControleBomba.ino
-  DESCRIÇÃO: Firmware SmartPump com Captive Portal, Lógica Segura de Relé e OTA.
-*/
+require('dotenv').config();
+const express = require('express');
+const mqtt = require('mqtt');
+const crypto = require('crypto');
+const axios = require('axios'); 
+const app = express();
 
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <WebServer.h>
-#include <Preferences.h>
-#include <PubSubClient.h>
-#include <esp_task_wdt.h>
-#include <DNSServer.h> 
-#include <HTTPUpdate.h> // ADICIONADO PARA OTA
-#include "secrets.h" 
+app.use(express.json());
+app.use(express.static('public'));
 
-// --- CONFIGURAÇÃO OTA WEB ---
-#define URL_FIRMWARE_BOMBA "https://raw.githubusercontent.com/LGEEEEEE/SEU_REPOSITORIO/main/ControleBomba.ino.bin"
+const PORT = process.env.PORT || 3000;
 
-// --- CONFIGURAÇÃO WATCHDOG ---
-#define WDT_TIMEOUT 15 // 15 Segundos
+// --- VARIÁVEIS DE AMBIENTE ---
+const MQTT_URL = process.env.MQTT_URL;
+const MQTT_USER = process.env.MQTT_USER;
+const MQTT_PASS = process.env.MQTT_PASS;
+const APP_PASSWORD = process.env.APP_PASSWORD; 
+const NTFY_TOPIC = process.env.NTFY_TOPIC; 
 
-// --- HARDWARE DA BOMBA ---
-const int PINO_RELE_REAL = 18;  // Vai na contatora
-const int PINO_FANTASMA = 23;   // Pino de segurança/aterramento virtual
-const int PINO_LED = 2;         // Led da placa para status
-const int PINO_RESET_CONFIG = 0;// Botão BOOT do ESP32
+// --- TÓPICOS SEPARADOS E PADRONIZADOS ---
+const TOPIC_STATUS_PORTAO = "projeto_LG/casa/portao/status";
+const TOPIC_STATUS_BOMBA = "projeto_LG/casa/bomba/status"; 
+const TOPIC_COMMAND = "projeto_LG/casa/portao";
+const TOPIC_COMMAND_BOMBA = "projeto_LG/casa/bomba/cmd";
 
-// --- OBJETOS DE REDE ---
-WebServer server(80);
-DNSServer dnsServer;
-const byte DNS_PORT = 53;
+// --- MEMÓRIA E ESTADOS ---
+let ultimoEstadoPortao = "AGUARDANDO"; 
+let ultimoEstadoBomba = "AGUARDANDO"; 
 
-Preferences preferences;
-WiFiClientSecure espClient;
-PubSubClient client(espClient);
+let ultimoEstadoNotificado = ""; 
+let ultimoTempoNotificacao = 0;
+let ultimoComandoOrigem = null; 
+let timeoutComando = null;
 
-// --- VARIÁVEIS DO SISTEMA ---
-String ssid_str = "";
-String pass_str = "";
-bool emModoConfig = false;
+let activeSessions = {}; 
+let sseClients = [];
 
-// Tópicos MQTT 
-const char* TOPIC_COMMAND_BOMBA = "projeto_LG/casa/bomba/cmd";
-const char* TOPIC_STATUS = "projeto_LG/casa/bomba/status";
+// --- CONEXÃO MQTT ---
+const client = mqtt.connect(MQTT_URL, {
+    username: MQTT_USER, 
+    password: MQTT_PASS,
+    protocol: 'mqtts', 
+    rejectUnauthorized: false
+});
 
-// --- CONTROLE DA BOMBA ---
-unsigned long tempoInicioBomba = 0;
-const unsigned long TEMPO_MAX_LIGADA = 15 * 60 * 1000; // 15 minutos
-bool bombaLigada = false;
+client.on('connect', () => {
+    console.log("✅ MQTT Conectado ao HiveMQ");
+    client.subscribe([TOPIC_STATUS_PORTAO, TOPIC_STATUS_BOMBA, TOPIC_COMMAND]);
+});
 
-String getDeviceID() {
-  uint64_t chipid = ESP.getEfuseMac();
-  uint16_t chip = (uint16_t)(chipid >> 32);
-  char hex[13];
-  snprintf(hex, 13, "%04X%08X", chip, (uint32_t)chipid);
-  return String(hex);
-}
-String deviceID;
+client.on('message', (topic, message) => {
+    const msg = message.toString();
 
-void publicarStatusBomba() {
-    if (bombaLigada) {
-        client.publish(TOPIC_STATUS, "BOMBA_LIGADA", true);
-        Serial.println("[STATUS] Enviado: LIGADA");
-    } else {
-        client.publish(TOPIC_STATUS, "BOMBA_DESLIGADA", true);
-        Serial.println("[STATUS] Enviado: DESLIGADA");
-    }
-}
-
-void controlarBomba(bool ligar) {
-    if (ligar && !bombaLigada) {
-        Serial.println("\n>>> LIGANDO BOMBA (15 MIN) <<<");
-        pinMode(PINO_RELE_REAL, OUTPUT);
-        digitalWrite(PINO_RELE_REAL, HIGH); 
-        delay(50);
-        digitalWrite(PINO_RELE_REAL, LOW);
-        
-        bombaLigada = true;
-        tempoInicioBomba = millis();
-        publicarStatusBomba();
-    } 
-    else if (!ligar && bombaLigada) {
-        Serial.println("\n>>> DESLIGANDO BOMBA <<<");
-        digitalWrite(PINO_RELE_REAL, HIGH);
-        delay(50);
-        pinMode(PINO_RELE_REAL, INPUT);     
-        
-        bombaLigada = false;
-        tempoInicioBomba = 0;
-        publicarStatusBomba();
-    }
-}
-
-// --- FUNÇÃO DE UPDATE OTA PARA A BOMBA ---
-void realizarUpdateFirmwareBomba() {
-  Serial.println("\n[UPDATE] Iniciando atualização OTA da Bomba...");
-  client.publish(TOPIC_STATUS, "STATUS_ATUALIZANDO_BOMBA", true);
-  
-  WiFiClientSecure clientOTA;
-  clientOTA.setInsecure();
-  t_httpUpdate_return ret = httpUpdate.update(clientOTA, URL_FIRMWARE_BOMBA);
-
-  switch (ret) {
-    case HTTP_UPDATE_FAILED:
-      Serial.printf("[UPDATE] FALHA (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
-      client.publish(TOPIC_STATUS, "ERRO_ATUALIZACAO_BOMBA", true);
-      break;
-    case HTTP_UPDATE_NO_UPDATES:
-      Serial.println("[UPDATE] Nenhuma atualização necessária.");
-      break;
-    case HTTP_UPDATE_OK:
-      Serial.println("[UPDATE] OK! Reiniciando...");
-      break;
-  }
-}
-
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-  Serial.println("\n\n--- INICIANDO SMART PUMP V3.0 ---");
-  deviceID = "Bomba_" + getDeviceID();
-  Serial.printf("[SYSTEM] Device ID: %s\n", deviceID.c_str());
-  
-  pinMode(PINO_RELE_REAL, INPUT);
-  pinMode(PINO_FANTASMA, OUTPUT); 
-  digitalWrite(PINO_FANTASMA, LOW); 
-  
-  pinMode(PINO_LED, OUTPUT);
-  pinMode(PINO_RESET_CONFIG, INPUT_PULLUP);
-
-  preferences.begin("pump_config", false);
-
-  if (digitalRead(PINO_RESET_CONFIG) == LOW) {
-    Serial.println("[RESET] Botão BOOT detectado! Limpando Wi-Fi...");
-    for(int i=0; i<5; i++) { digitalWrite(PINO_LED, !digitalRead(PINO_LED)); delay(100); }
-    preferences.clear();
-    ESP.restart();
-  }
-
-  ssid_str = preferences.getString("ssid", "");
-  pass_str = preferences.getString("pass", "");
-  if (ssid_str == "") {
-      Serial.println("[MODE] Nenhuma rede configurada. Entrando em Modo AP.");
-      setupModoConfiguracao();
-  } else {
-      Serial.println("[MODE] Rede encontrada. Conectando...");
-      setupModoOperacao();
-  }
-
-  esp_task_wdt_config_t wdt_config = { .timeout_ms = WDT_TIMEOUT * 1000, .idle_core_mask = 0, .trigger_panic = true };
-  esp_task_wdt_deinit(); 
-  esp_task_wdt_init(&wdt_config); 
-  esp_task_wdt_add(NULL); 
-}
-
-void loop() {
-  esp_task_wdt_reset();
-  if (digitalRead(PINO_RESET_CONFIG) == LOW) {
-    unsigned long tempoInicio = millis();
-    bool resetar = true;
-    while (millis() - tempoInicio < 5000) {
-      if (digitalRead(PINO_RESET_CONFIG) == HIGH) { resetar = false; break; }
-      digitalWrite(PINO_LED, !digitalRead(PINO_LED)); delay(100); 
-      esp_task_wdt_reset();
-    }
-    if (resetar) { preferences.clear(); ESP.restart(); }
-  }
-
-  if (emModoConfig) {
-    dnsServer.processNextRequest(); 
-    server.handleClient();
-  } else {
-    if (!client.connected()) reconnectMQTT();
-    client.loop();
-    if (bombaLigada) {
-        if (millis() - tempoInicioBomba >= TEMPO_MAX_LIGADA) {
-            Serial.println("[AVISO] Tempo máximo de 15 min atingido. Desligando bomba.");
-            controlarBomba(false);
+    if (topic === TOPIC_STATUS_PORTAO) {
+        if (msg.includes("BOMBA")) return; 
+        if (msg === "STATUS_ATUALIZANDO_SISTEMA" || msg === "ERRO_ATUALIZACAO") {
+            console.log(`\nOTA PORTÃO: ${msg}\n`);
+            sseClients.forEach(c => c.res.write(`data: PORTAO_${msg}\n\n`));
+        }
+        else if (msg !== ultimoEstadoPortao) {
+            console.log(`🚪 Status Portão: ${msg}`);
+            ultimoEstadoPortao = msg;
+            sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
+            verificarENotificar(msg);
         }
     }
-  }
-}
+    else if (topic === TOPIC_STATUS_BOMBA) {
+        if (msg === "STATUS_ATUALIZANDO_BOMBA" || msg === "ERRO_ATUALIZACAO_BOMBA") {
+            console.log(`\nOTA BOMBA: ${msg}\n`);
+            sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
+        }
+        else if (msg !== ultimoEstadoBomba) {
+            console.log(`💧 Status Bomba: ${msg}`);
+            ultimoEstadoBomba = msg;
+            sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
+        }
+    }
+    else if (topic === TOPIC_COMMAND) {
+        const partes = msg.split('|');
+        if (partes[0] === "ABRIR_PORTAO_AGORA") {
+            ultimoComandoOrigem = `${partes[1]} (${partes[2]})`;
+            if (timeoutComando) clearTimeout(timeoutComando);
+            timeoutComando = setTimeout(() => { ultimoComandoOrigem = null; }, 40000);
+        }
+    }
+});
 
-void setupModoOperacao() {
-  emModoConfig = false;
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid_str.c_str(), pass_str.c_str());
-
-  int tentativas = 0;
-  while (WiFi.status() != WL_CONNECTED && tentativas < 25) { 
-    delay(500); Serial.print("."); tentativas++; esp_task_wdt_reset(); 
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n[WIFI] Conectado!");
-    digitalWrite(PINO_LED, HIGH);
+function verificarENotificar(estado) {
+    if (estado !== "ESTADO_REAL_ABERTO" && estado !== "ESTADO_REAL_FECHADO") return;
+    if (estado === ultimoEstadoNotificado) return;
     
-    espClient.setInsecure();
-    client.setServer(MQTT_SERVER_DEFAULT, 8883); 
-    client.setCallback(callbackMQTT);
-  } else {
-    Serial.println("\n[WIFI] Falha na conexão. Voltando para Modo AP.");
-    setupModoConfiguracao();
-  }
+    const agora = Date.now();
+    if (agora - ultimoTempoNotificacao < 1000) return;
+
+    let titulo = "", mensagem = "", tags = [];
+    
+    if (estado === "ESTADO_REAL_ABERTO") {
+        titulo = "Portão Aberto ⚠️";
+        let quem = ultimoComandoOrigem ? ultimoComandoOrigem : "Controle Remoto/Manual";
+        mensagem = `O portão foi aberto por: ${quem}`;
+        tags = ["warning", "door"]; 
+    } else if (estado === "ESTADO_REAL_FECHADO") { 
+        titulo = "Portão Fechado 🔒";
+        mensagem = "Portão fechado com segurança.";
+        tags = ["white_check_mark", "lock"];
+    }
+
+    ultimoEstadoNotificado = estado;
+    ultimoTempoNotificacao = agora; 
+
+    if (NTFY_TOPIC) {
+        axios.post('https://ntfy.sh/', {
+            topic: NTFY_TOPIC, title: titulo, message: mensagem,
+            priority: 3, tags: tags, click: "https://smartgateweb.onrender.com"
+        }).catch(e => console.error("Erro ao enviar notificação push via ntfy"));
+    }
 }
 
-void reconnectMQTT() {
-  if (WiFi.status() != WL_CONNECTED) return;
-  static unsigned long lastMqttAttempt = 0;
-  if (millis() - lastMqttAttempt < 5000) return; 
-  lastMqttAttempt = millis();
+app.get('/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+    
+    const id = Date.now();
+    sseClients.push({ id, res });
+    
+    res.write(`data: ${ultimoEstadoPortao}\n\n`);
+    res.write(`data: ${ultimoEstadoBomba}\n\n`);
+    
+    req.on('close', () => { sseClients = sseClients.filter(c => c.id !== id); });
+});
 
-  Serial.println("[MQTT] Tentando conectar...");
-  
-  String clientIdStr = "ESP32_Bomba_" + String(random(0xffff), HEX);
-  if (client.connect(clientIdStr.c_str(), MQTT_USER_DEFAULT, MQTT_PASS_DEFAULT)) {
-      Serial.println("[MQTT] SUCESSO!");
-      client.subscribe(TOPIC_COMMAND_BOMBA);
-      publicarStatusBomba();
-  } else {
-      Serial.print("[MQTT] Falha: ");
-      Serial.println(client.state());
-  }
-}
+app.post('/api/login', (req, res) => {
+    const { password, name } = req.body; 
+    if (password === APP_PASSWORD) {
+        const token = crypto.randomBytes(16).toString('hex');
+        const userName = name || "Anônimo";
+        activeSessions[token] = userName; 
+        console.log(`🔑 Login: ${userName} entrou.`);
+        res.json({ success: true, token });
+    } else {
+        res.status(401).json({ success: false, error: "Senha Incorreta" });
+    }
+});
 
-void callbackMQTT(char* topic, byte* payload, unsigned int length) {
-  String msg = "";
-  for(int i=0; i<length; i++) msg += (char)payload[i];
-  
-  Serial.print("[MQTT RX] Comando recebido: ");
-  Serial.println(msg);
-  if (msg.startsWith("LIGAR_BOMBA")) {
-      controlarBomba(true);
-  } 
-  else if (msg.startsWith("DESLIGAR_BOMBA")) {
-      controlarBomba(false);
-  }
-  else if (msg.startsWith("ATUALIZAR_FIRMWARE")) {
-      realizarUpdateFirmwareBomba();
-  }
-}
+app.post('/api/acionar', (req, res) => {
+    const token = req.headers['authorization'];
+    if (!activeSessions[token]) return res.status(403).json({ error: "Sessão Expirada." });
+    
+    const usuarioNome = activeSessions[token];
+    const userAgent = req.headers['user-agent'] || "";
+    let device = "PC";
+    if (userAgent.includes("Android")) device = "Android";
+    else if (userAgent.includes("iPhone")) device = "iPhone";
 
-void setupModoConfiguracao() {
-  emModoConfig = true;
-  WiFi.disconnect(true); delay(100);
-  WiFi.mode(WIFI_AP);
-  IPAddress apIP(192, 168, 4, 1);
-  WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-  WiFi.softAP("SmartPump_Config", "12345678"); 
-  
-  dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-  dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
-  auto pageHandler = []() {
-    int n = WiFi.scanNetworks();
-    String opcoesWifi = (n == 0) ? "<option value=''>Nenhuma rede encontrada</option>" : "";
-    for (int i = 0; i < n; ++i) {
-        opcoesWifi += "<option value='" + WiFi.SSID(i) + "'>" + WiFi.SSID(i) + " (" + String(WiFi.RSSI(i)) + "dBm)</option>";
+    const dispositivo = req.body.dispositivo || "portao"; 
+    const acao = req.body.comando_customizado || "ABRIR_PORTAO_AGORA";
+
+    if (dispositivo === "bomba") {
+        client.publish(TOPIC_COMMAND_BOMBA, acao);
+        console.log(`💧 Comando Bomba: [${acao}] por ${usuarioNome} (${device})`);
+    } else {
+        const payload = `${acao}|${usuarioNome}|${device}`;
+        client.publish(TOPIC_COMMAND, payload);
+        console.log(`📤 Comando Portão: [${acao}] de: ${usuarioNome} (${device})`);
     }
     
-    String html = R"rawliteral(
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Configurar Bomba</title>
-  <style>
-    body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; padding: 20px; }
-    .container { background: #1e293b; padding: 30px; border-radius: 12px; width: 100%; max-width: 350px; text-align: center; }
-    h2 { color: #3b82f6; }
-    label { display: block; margin: 15px 0 5px; text-align: left; }
-    select, input { width: 100%; padding: 10px; border-radius: 8px; border: none; outline: none; box-sizing: border-box; }
-    button { margin-top: 25px; width: 100%; background: #3b82f6; color: white; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>SmartPump Wi-Fi</h2>
-    <form action="/save" method="POST">
-      <label>1. Selecione a Rede</label>
-      <select name="ssid" required>%WIFI_OPTIONS%</select>
-      <label>2. Senha do Wi-Fi</label>
-      <input type="password" name="pass" placeholder="Senha da internet">
-      <button type="submit">SALVAR E CONECTAR</button>
-    </form>
-  </div>
-</body>
-</html>
-)rawliteral";
+    res.json({ success: true });
+});
 
-    html.replace("%WIFI_OPTIONS%", opcoesWifi);
-    server.send(200, "text/html", html);
-  };
+app.post('/api/admin/update', (req, res) => {
+    const token = req.headers['authorization'];
+    if (!activeSessions[token]) return res.status(403).json({ error: "Acesso Negado." });
+    
+    const dispositivo = req.body.dispositivo;
 
-  server.on("/", HTTP_GET, pageHandler);
-  server.on("/generate_204", HTTP_GET, pageHandler);
-  server.on("/hotspot-detect.html", HTTP_GET, pageHandler);
-  
-  server.onNotFound([=]() {
-    if (server.hostHeader() == WiFi.softAPIP().toString()) pageHandler();
-    else { server.sendHeader("Location", String("http://") + WiFi.softAPIP().toString(), true); server.send(302, "text/plain", ""); }
-  });
-
-  server.on("/save", HTTP_POST, []() {
-    if (server.arg("ssid").length() > 0) {
-      preferences.putString("ssid", server.arg("ssid"));
-      preferences.putString("pass", server.arg("pass"));
-      server.send(200, "text/html", "<html><body style='background:#0f172a;color:#10b981;text-align:center;margin-top:20vh;'><h2>Salvo! A placa vai reiniciar.</h2></body></html>");
-      delay(2000); ESP.restart();
+    if (dispositivo === "bomba") {
+        console.log("\n🚀 OTA BOMBA SOLICITADO\n");
+        client.publish(TOPIC_COMMAND_BOMBA, "ATUALIZAR_FIRMWARE");
+    } else {
+        console.log("\n🚀 OTA PORTÃO SOLICITADO\n");
+        client.publish(TOPIC_COMMAND, "ATUALIZAR_FIRMWARE");
     }
-  });
-  
-  server.begin();
-}
+    
+    res.json({ success: true });
+});
+
+app.listen(PORT, () => console.log(`🚀 Smart Home Hub rodando na porta ${PORT}`));

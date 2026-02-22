@@ -68,14 +68,19 @@
             <details>
                 <summary><i class="ph ph-gear"></i> Configurações</summary>
                 <div class="admin-box">
-                    <div class="info-row"><span>Versão</span><span class="badge">v3.1 (Hub)</span></div>
+                    <div class="info-row"><span>Versão</span><span class="badge">v3.2 (Hub)</span></div>
                     
-                    <button onclick="solicitarUpdate()" class="btn-update">
-                        <i class="ph ph-cloud-arrow-up"></i> Atualizar Firmware
-                    </button>
+                    <div class="update-buttons">
+                        <button onclick="solicitarUpdate('portao')" id="btnUpdatePortao" class="btn-update">
+                            <i class="ph ph-garage"></i> Atualizar Portão
+                        </button>
+                        <button onclick="solicitarUpdate('bomba')" id="btnUpdateBomba" class="btn-update">
+                            <i class="ph ph-drop"></i> Atualizar Bomba
+                        </button>
+                    </div>
 
                     <div id="progressContainer" class="hidden">
-                        <div class="progress-label">Baixando do GitHub...</div>
+                        <div id="progressLabel" class="progress-label">Baixando do GitHub...</div>
                         <div class="progress-track">
                             <div class="progress-bar-fill"></div>
                         </div>

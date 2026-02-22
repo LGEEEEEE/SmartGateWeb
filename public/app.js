@@ -6,6 +6,7 @@ const statusIcon = document.getElementById('statusIcon');
 const btnOpen = document.getElementById('btnOpen');
 const updateSuccessCheck = document.getElementById('updateSuccessCheck');
 const progressContainer = document.getElementById('progressContainer');
+const progressLabel = document.getElementById('progressLabel');
 
 // --- VARIÁVEIS DE ESTADO PORTÃO ---
 let estadoAtual = "DESCONHECIDO"; 
@@ -112,15 +113,27 @@ async function controlarBomba(comando) {
     } catch (e) { showToast("Erro ao comunicar com a bomba", "error"); }
 }
 
-async function solicitarUpdate() {
-    if (!confirm("⚠️ Confirmar atualização de Firmware?")) return;
-    const btn = document.querySelector('.btn-update');
-    btn.innerHTML = `<i class="ph ph-spinner ph-spin"></i> Enviando...`; btn.disabled = true;
+async function solicitarUpdate(dispositivo) {
+    let nomeDispositivo = dispositivo === 'portao' ? 'Portão' : 'Bomba';
+    if (!confirm(`⚠️ Confirmar atualização de Firmware do ${nomeDispositivo}?`)) return;
+    
+    const btnId = dispositivo === 'portao' ? 'btnUpdatePortao' : 'btnUpdateBomba';
+    const btn = document.getElementById(btnId);
+    const textoOriginal = btn.innerHTML;
+    
+    btn.innerHTML = `<i class="ph ph-spinner ph-spin"></i> Enviando...`; 
+    btn.disabled = true;
+    
     try {
-        await fetch('/api/admin/update', { method: 'POST', headers: { 'Authorization': localStorage.getItem('gate_token') } });
-        showToast("Update solicitado!", "info");
+        await fetch('/api/admin/update', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
+            body: JSON.stringify({ dispositivo: dispositivo })
+        });
+        showToast(`Update ${nomeDispositivo} solicitado!`, "info");
     } catch (e) { 
-        btn.innerHTML = `<i class="ph ph-cloud-arrow-up"></i> Atualizar Firmware`; btn.disabled = false;
+        btn.innerHTML = textoOriginal; 
+        btn.disabled = false;
         showToast("Erro de conexão.", "error");
     }
 }
@@ -189,6 +202,13 @@ function atualizarUI(texto, cor, iconeNome, pulsando = false) {
     else statusIndicator.classList.remove('pulsing');
 }
 
+function reativarBotoesUpdate() {
+    const btnPortao = document.getElementById('btnUpdatePortao');
+    const btnBomba = document.getElementById('btnUpdateBomba');
+    if (btnPortao) { btnPortao.innerHTML = `<i class="ph ph-garage"></i> Atualizar Portão`; btnPortao.disabled = false; }
+    if (btnBomba) { btnBomba.innerHTML = `<i class="ph ph-drop"></i> Atualizar Bomba`; btnBomba.disabled = false; }
+}
+
 // --- SSE EVENTOS ---
 function conectarSSE() {
     const evtSource = new EventSource('/events');
@@ -224,17 +244,17 @@ function conectarSSE() {
         }
         
         // ATUALIZAÇÃO FIRMWARE:
-        else if (msg === "STATUS_ATUALIZANDO_SISTEMA") {
+        else if (msg === "PORTAO_STATUS_ATUALIZANDO_SISTEMA" || msg === "STATUS_ATUALIZANDO_BOMBA") {
              emProcessoDeUpdate = true;
              progressContainer.classList.remove('hidden');
+             if (progressLabel) progressLabel.innerText = msg.includes("BOMBA") ? "Baixando Firmware Bomba..." : "Baixando Firmware Portão...";
              showToast("Firmware atualizando...", "info");
-             atualizarUI("Atualizando...", "#00d2ff", "ph-cloud-arrow-down", true);
         }
-        else if (msg === "ERRO_ATUALIZACAO") {
+        else if (msg === "PORTAO_ERRO_ATUALIZACAO" || msg === "ERRO_ATUALIZACAO_BOMBA") {
             emProcessoDeUpdate = false;
             progressContainer.classList.add('hidden');
             showToast("Erro na atualização!", "error");
-            document.querySelector('.btn-update').disabled = false;
+            reativarBotoesUpdate();
         }
     };
 }
@@ -244,8 +264,7 @@ function verificarFimUpdate() {
         emProcessoDeUpdate = false;
         showToast("Firmware atualizado!", "success");
         progressContainer.classList.add('hidden');
-        document.querySelector('.btn-update').disabled = false;
-        document.querySelector('.btn-update').innerHTML = `<i class="ph ph-cloud-arrow-up"></i> Atualizar Firmware`;
+        reativarBotoesUpdate();
         updateSuccessCheck.classList.remove('hidden');
         setTimeout(() => updateSuccessCheck.classList.add('hidden'), 5000);
     }
