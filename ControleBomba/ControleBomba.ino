@@ -1,6 +1,6 @@
 /*
   ARQUIVO: ControleBomba.ino
-  DESCRIÇÃO: Firmware SmartPump (15 Minutos) com Captive Portal e Lógica Segura de Relé.
+  DESCRIÇÃO: Firmware SmartPump com Captive Portal, Lógica Segura de Relé e OTA.
 */
 
 #include <WiFi.h>
@@ -10,7 +10,11 @@
 #include <PubSubClient.h>
 #include <esp_task_wdt.h>
 #include <DNSServer.h> 
+#include <HTTPUpdate.h> // ADICIONADO PARA OTA
 #include "secrets.h" 
+
+// --- CONFIGURAÇÃO OTA WEB ---
+#define URL_FIRMWARE_BOMBA "https://raw.githubusercontent.com/LGEEEEEE/SEU_REPOSITORIO/main/ControleBomba.ino.bin"
 
 // --- CONFIGURAÇÃO WATCHDOG ---
 #define WDT_TIMEOUT 15 // 15 Segundos
@@ -19,11 +23,11 @@
 const int PINO_RELE_REAL = 18;  // Vai na contatora
 const int PINO_FANTASMA = 23;   // Pino de segurança/aterramento virtual
 const int PINO_LED = 2;         // Led da placa para status
-const int PINO_RESET_CONFIG = 0; // Botão BOOT do ESP32 (Segure para resetar o Wi-Fi)
+const int PINO_RESET_CONFIG = 0;// Botão BOOT do ESP32
 
 // --- OBJETOS DE REDE ---
 WebServer server(80);
-DNSServer dnsServer; 
+DNSServer dnsServer;
 const byte DNS_PORT = 53;
 
 Preferences preferences;
@@ -31,20 +35,19 @@ WiFiClientSecure espClient;
 PubSubClient client(espClient);
 
 // --- VARIÁVEIS DO SISTEMA ---
-String ssid_str = ""; 
+String ssid_str = "";
 String pass_str = "";
 bool emModoConfig = false;
 
-// Tópicos MQTT (ATUALIZADOS)
+// Tópicos MQTT 
 const char* TOPIC_COMMAND_BOMBA = "projeto_LG/casa/bomba/cmd";
 const char* TOPIC_STATUS = "projeto_LG/casa/bomba/status";
 
 // --- CONTROLE DA BOMBA ---
 unsigned long tempoInicioBomba = 0;
-const unsigned long TEMPO_MAX_LIGADA = 15 * 60 * 1000; // 15 minutos em milissegundos
+const unsigned long TEMPO_MAX_LIGADA = 15 * 60 * 1000; // 15 minutos
 bool bombaLigada = false;
 
-// --- LEITURA DE ID ---
 String getDeviceID() {
   uint64_t chipid = ESP.getEfuseMac();
   uint16_t chip = (uint16_t)(chipid >> 32);
@@ -53,10 +56,6 @@ String getDeviceID() {
   return String(hex);
 }
 String deviceID;
-
-// ==========================================
-// FUNÇÕES DE CONTROLE DA BOMBA (LÓGICA SEGURA)
-// ==========================================
 
 void publicarStatusBomba() {
     if (bombaLigada) {
@@ -71,11 +70,10 @@ void publicarStatusBomba() {
 void controlarBomba(bool ligar) {
     if (ligar && !bombaLigada) {
         Serial.println("\n>>> LIGANDO BOMBA (15 MIN) <<<");
-        // Lógica segura: Transforma em OUTPUT e joga LOW (Aciona o Relé)
         pinMode(PINO_RELE_REAL, OUTPUT);
-        digitalWrite(PINO_RELE_REAL, HIGH); // Breve estado alto pra não dar pico
+        digitalWrite(PINO_RELE_REAL, HIGH); 
         delay(50);
-        digitalWrite(PINO_RELE_REAL, LOW);  // LIGA DE FATO O RELÉ
+        digitalWrite(PINO_RELE_REAL, LOW);
         
         bombaLigada = true;
         tempoInicioBomba = millis();
@@ -83,10 +81,9 @@ void controlarBomba(bool ligar) {
     } 
     else if (!ligar && bombaLigada) {
         Serial.println("\n>>> DESLIGANDO BOMBA <<<");
-        // Lógica segura: Joga HIGH para cortar e volta pra INPUT
-        digitalWrite(PINO_RELE_REAL, HIGH); 
+        digitalWrite(PINO_RELE_REAL, HIGH);
         delay(50);
-        pinMode(PINO_RELE_REAL, INPUT);     // MODO SEGURO (Alta impedância)
+        pinMode(PINO_RELE_REAL, INPUT);     
         
         bombaLigada = false;
         tempoInicioBomba = 0;
@@ -94,29 +91,45 @@ void controlarBomba(bool ligar) {
     }
 }
 
-// ==========================================
-// SETUP
-// ==========================================
+// --- FUNÇÃO DE UPDATE OTA PARA A BOMBA ---
+void realizarUpdateFirmwareBomba() {
+  Serial.println("\n[UPDATE] Iniciando atualização OTA da Bomba...");
+  client.publish(TOPIC_STATUS, "STATUS_ATUALIZANDO_BOMBA", true);
+  
+  WiFiClientSecure clientOTA;
+  clientOTA.setInsecure();
+  t_httpUpdate_return ret = httpUpdate.update(clientOTA, URL_FIRMWARE_BOMBA);
+
+  switch (ret) {
+    case HTTP_UPDATE_FAILED:
+      Serial.printf("[UPDATE] FALHA (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+      client.publish(TOPIC_STATUS, "ERRO_ATUALIZACAO_BOMBA", true);
+      break;
+    case HTTP_UPDATE_NO_UPDATES:
+      Serial.println("[UPDATE] Nenhuma atualização necessária.");
+      break;
+    case HTTP_UPDATE_OK:
+      Serial.println("[UPDATE] OK! Reiniciando...");
+      break;
+  }
+}
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- INICIANDO SMART PUMP V2.0 ---");
-  
+  Serial.println("\n\n--- INICIANDO SMART PUMP V3.0 ---");
   deviceID = "Bomba_" + getDeviceID();
   Serial.printf("[SYSTEM] Device ID: %s\n", deviceID.c_str());
   
-  // Configura Hardware
-  pinMode(PINO_RELE_REAL, INPUT); // Começa desligado e seguro
+  pinMode(PINO_RELE_REAL, INPUT);
   pinMode(PINO_FANTASMA, OUTPUT); 
-  digitalWrite(PINO_FANTASMA, LOW); // Aterra o pino fantasma
+  digitalWrite(PINO_FANTASMA, LOW); 
   
   pinMode(PINO_LED, OUTPUT);
   pinMode(PINO_RESET_CONFIG, INPUT_PULLUP);
 
   preferences.begin("pump_config", false);
 
-  // Factory Reset (Segurar botão BOOT ao ligar a energia)
   if (digitalRead(PINO_RESET_CONFIG) == LOW) {
     Serial.println("[RESET] Botão BOOT detectado! Limpando Wi-Fi...");
     for(int i=0; i<5; i++) { digitalWrite(PINO_LED, !digitalRead(PINO_LED)); delay(100); }
@@ -124,10 +137,8 @@ void setup() {
     ESP.restart();
   }
 
-  // Carrega Wi-Fi
   ssid_str = preferences.getString("ssid", "");
   pass_str = preferences.getString("pass", "");
-  
   if (ssid_str == "") {
       Serial.println("[MODE] Nenhuma rede configurada. Entrando em Modo AP.");
       setupModoConfiguracao();
@@ -136,21 +147,14 @@ void setup() {
       setupModoOperacao();
   }
 
-  // Watchdog
   esp_task_wdt_config_t wdt_config = { .timeout_ms = WDT_TIMEOUT * 1000, .idle_core_mask = 0, .trigger_panic = true };
   esp_task_wdt_deinit(); 
   esp_task_wdt_init(&wdt_config); 
   esp_task_wdt_add(NULL); 
 }
 
-// ==========================================
-// LOOP PRINCIPAL
-// ==========================================
-
 void loop() {
   esp_task_wdt_reset();
-
-  // Reset de Wi-Fi em tempo de execução (Segurar BOOT por 5s)
   if (digitalRead(PINO_RESET_CONFIG) == LOW) {
     unsigned long tempoInicio = millis();
     bool resetar = true;
@@ -168,8 +172,6 @@ void loop() {
   } else {
     if (!client.connected()) reconnectMQTT();
     client.loop();
-    
-    // TEMPORIZADOR DA BOMBA (DESLIGA SOZINHO APÓS 15 MIN)
     if (bombaLigada) {
         if (millis() - tempoInicioBomba >= TEMPO_MAX_LIGADA) {
             Serial.println("[AVISO] Tempo máximo de 15 min atingido. Desligando bomba.");
@@ -178,10 +180,6 @@ void loop() {
     }
   }
 }
-
-// ==========================================
-// CONEXÕES E MQTT
-// ==========================================
 
 void setupModoOperacao() {
   emModoConfig = false;
@@ -197,7 +195,7 @@ void setupModoOperacao() {
     Serial.println("\n[WIFI] Conectado!");
     digitalWrite(PINO_LED, HIGH);
     
-    espClient.setInsecure(); // Pula verificação complexa de certificado
+    espClient.setInsecure();
     client.setServer(MQTT_SERVER_DEFAULT, 8883); 
     client.setCallback(callbackMQTT);
   } else {
@@ -215,11 +213,10 @@ void reconnectMQTT() {
   Serial.println("[MQTT] Tentando conectar...");
   
   String clientIdStr = "ESP32_Bomba_" + String(random(0xffff), HEX);
-  
   if (client.connect(clientIdStr.c_str(), MQTT_USER_DEFAULT, MQTT_PASS_DEFAULT)) {
       Serial.println("[MQTT] SUCESSO!");
       client.subscribe(TOPIC_COMMAND_BOMBA);
-      publicarStatusBomba(); 
+      publicarStatusBomba();
   } else {
       Serial.print("[MQTT] Falha: ");
       Serial.println(client.state());
@@ -232,31 +229,27 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length) {
   
   Serial.print("[MQTT RX] Comando recebido: ");
   Serial.println(msg);
-
   if (msg.startsWith("LIGAR_BOMBA")) {
       controlarBomba(true);
   } 
   else if (msg.startsWith("DESLIGAR_BOMBA")) {
       controlarBomba(false);
   }
+  else if (msg.startsWith("ATUALIZAR_FIRMWARE")) {
+      realizarUpdateFirmwareBomba();
+  }
 }
-
-// ==========================================
-// PORTAL CAPTIVE (CONFIGURAÇÃO WI-FI)
-// ==========================================
 
 void setupModoConfiguracao() {
   emModoConfig = true;
   WiFi.disconnect(true); delay(100);
   WiFi.mode(WIFI_AP);
-  
   IPAddress apIP(192, 168, 4, 1);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
   WiFi.softAP("SmartPump_Config", "12345678"); 
   
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
-
   auto pageHandler = []() {
     int n = WiFi.scanNetworks();
     String opcoesWifi = (n == 0) ? "<option value=''>Nenhuma rede encontrada</option>" : "";
@@ -285,10 +278,8 @@ void setupModoConfiguracao() {
     <form action="/save" method="POST">
       <label>1. Selecione a Rede</label>
       <select name="ssid" required>%WIFI_OPTIONS%</select>
-      
       <label>2. Senha do Wi-Fi</label>
       <input type="password" name="pass" placeholder="Senha da internet">
-      
       <button type="submit">SALVAR E CONECTAR</button>
     </form>
   </div>
@@ -313,7 +304,6 @@ void setupModoConfiguracao() {
     if (server.arg("ssid").length() > 0) {
       preferences.putString("ssid", server.arg("ssid"));
       preferences.putString("pass", server.arg("pass"));
-      
       server.send(200, "text/html", "<html><body style='background:#0f172a;color:#10b981;text-align:center;margin-top:20vh;'><h2>Salvo! A placa vai reiniciar.</h2></body></html>");
       delay(2000); ESP.restart();
     }
