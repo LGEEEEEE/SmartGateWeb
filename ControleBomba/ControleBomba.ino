@@ -1,6 +1,6 @@
 /*
-  ARQUIVO: ControleBomba.ino
-  DESCRIÇÃO: Firmware SmartPump com Captive Portal, Relé Seguro, OTA e WatchDog Lógico.
+  FICHEIRO: ControleBomba.ino
+  DESCRIÇÃO: Firmware SmartPump V3.2 - Lógica Segura, OTA, WatchDog Lógico e Prevenção de Zumbis.
 */
 
 #include <WiFi.h>
@@ -47,7 +47,7 @@ bool emModoConfig = false;
 const char* TOPIC_COMMAND_BOMBA = "projeto_LG/casa/bomba/cmd";
 const char* TOPIC_STATUS = "projeto_LG/casa/bomba/status";
 
-// --- CONTROLE DA BOMBA ---
+// --- CONTROLO DA BOMBA ---
 unsigned long tempoInicioBomba = 0;
 const unsigned long TEMPO_MAX_LIGADA = 15 * 60 * 1000; 
 bool bombaLigada = false;
@@ -96,7 +96,7 @@ void controlarBomba(bool ligar) {
 }
 
 void realizarUpdateFirmwareBomba() {
-  Serial.println("\n[UPDATE] Iniciando atualização OTA da Bomba...");
+  Serial.println("\n[UPDATE] A iniciar atualização OTA da Bomba...");
   client.publish(TOPIC_STATUS, "STATUS_ATUALIZANDO_BOMBA", true);
   
   WiFiClientSecure clientOTA;
@@ -112,7 +112,7 @@ void realizarUpdateFirmwareBomba() {
       Serial.println("[UPDATE] Nenhuma atualização necessária.");
       break;
     case HTTP_UPDATE_OK:
-      Serial.println("[UPDATE] OK! Reiniciando...");
+      Serial.println("[UPDATE] OK! A reiniciar...");
       break;
   }
 }
@@ -120,7 +120,7 @@ void realizarUpdateFirmwareBomba() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- INICIANDO SMART PUMP V3.1 (WATCHDOG) ---");
+  Serial.println("\n\n--- A INICIAR SMART PUMP V3.2 (ANTI-ZOMBIE) ---");
   deviceID = "Bomba_" + getDeviceID();
   Serial.printf("[SYSTEM] Device ID: %s\n", deviceID.c_str());
   
@@ -134,7 +134,7 @@ void setup() {
   preferences.begin("pump_config", false);
 
   if (digitalRead(PINO_RESET_CONFIG) == LOW) {
-    Serial.println("[RESET] Botão BOOT detectado! Limpando Wi-Fi...");
+    Serial.println("[RESET] Botão BOOT detetado! A limpar Wi-Fi...");
     for(int i=0; i<5; i++) { digitalWrite(PINO_LED, !digitalRead(PINO_LED)); delay(100); }
     preferences.clear();
     ESP.restart();
@@ -144,10 +144,10 @@ void setup() {
   pass_str = preferences.getString("pass", "");
   
   if (ssid_str == "") {
-      Serial.println("[MODE] Nenhuma rede configurada. Entrando em Modo AP.");
+      Serial.println("[MODE] Nenhuma rede configurada. A entrar em Modo AP.");
       setupModoConfiguracao();
   } else {
-      Serial.println("[MODE] Rede encontrada. Conectando...");
+      Serial.println("[MODE] Rede encontrada. A conectar...");
       setupModoOperacao();
   }
 
@@ -175,13 +175,12 @@ void loop() {
     dnsServer.processNextRequest(); 
     server.handleClient();
   } else {
-    // Se estiver em modo operação, tenta manter conectado
     if (!client.connected()) reconnectMQTT();
     client.loop();
     
     if (bombaLigada) {
         if (millis() - tempoInicioBomba >= TEMPO_MAX_LIGADA) {
-            Serial.println("[AVISO] Tempo máximo de 15 min atingido. Desligando bomba.");
+            Serial.println("[AVISO] Tempo máximo de 15 min atingido. A desligar bomba.");
             controlarBomba(false);
         }
     }
@@ -191,6 +190,11 @@ void loop() {
 void setupModoOperacao() {
   emModoConfig = false;
   WiFi.mode(WIFI_STA);
+
+  // --- VACINA 1: Auto-Reconnect e Proteção da Memória Flash ---
+  WiFi.setAutoReconnect(true); 
+  WiFi.persistent(false);      
+
   WiFi.begin(ssid_str.c_str(), pass_str.c_str());
 
   int tentativas = 0;
@@ -206,46 +210,50 @@ void setupModoOperacao() {
     client.setServer(MQTT_SERVER_DEFAULT, 8883); 
     client.setCallback(callbackMQTT);
   } else {
-    Serial.println("\n[WIFI] Falha na conexão. Voltando para Modo AP.");
+    Serial.println("\n[WIFI] Falha na conexão. A voltar para Modo AP.");
     setupModoConfiguracao();
   }
 }
 
 void reconnectMQTT() {
-  // Se o Wi-Fi caiu, não adianta tentar conectar no MQTT. O loop vai continuar chamando.
   if (WiFi.status() != WL_CONNECTED) return; 
 
   static unsigned long lastMqttAttempt = 0;
-  // Tenta reconectar a cada 5 segundos
   if (millis() - lastMqttAttempt < 5000) return; 
   lastMqttAttempt = millis();
 
-  Serial.println("[MQTT] Tentando conectar...");
+  Serial.println("[MQTT] A tentar ligar...");
+
+  // --- VACINA 2: Matar "Conexões Zumbi" ---
+  espClient.stop(); 
   
   String clientIdStr = "ESP32_Bomba_" + String(random(0xffff), HEX);
   if (client.connect(clientIdStr.c_str(), MQTT_USER_DEFAULT, MQTT_PASS_DEFAULT)) {
       Serial.println("[MQTT] SUCESSO!");
-      tentativasFalhas = 0; // Zerou as falhas ao conectar com sucesso
+      tentativasFalhas = 0; 
       client.subscribe(TOPIC_COMMAND_BOMBA);
       publicarStatusBomba();
   } else {
-      tentativasFalhas++; // Soma mais uma falha
+      tentativasFalhas++; 
       Serial.print("[MQTT] Falha: ");
       Serial.print(client.state());
       Serial.print(" | Tentativas: ");
       Serial.println(tentativasFalhas);
 
-      // Gatilho do WatchDog Lógico
       if (tentativasFalhas >= MAX_TENTATIVAS_MQTT) {
-          Serial.println("\n[ERRO CRÍTICO] Falhas sucessivas no servidor. Reiniciando a placa...\n");
+          Serial.println("\n[ERRO CRÍTICO] Falhas sucessivas no servidor. A reiniciar a placa...\n");
           delay(1000); 
-          ESP.restart(); // Renova todo o sistema para limpar memória
+          ESP.restart(); 
       }
   }
 }
 
 void callbackMQTT(char* topic, byte* payload, unsigned int length) {
   String msg = "";
+
+  // --- VACINA 3: Prevenir Fragmentação de Memória RAM ---
+  msg.reserve(length + 1); 
+
   for(int i=0; i<length; i++) msg += (char)payload[i];
   
   Serial.print("[MQTT RX] Comando recebido: ");
