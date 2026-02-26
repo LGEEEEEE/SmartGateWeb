@@ -54,6 +54,7 @@ client.on('message', (topic, message) => {
     if (topic === TOPIC_STATUS_PORTAO) {
         if (msg.includes("BOMBA")) return; 
         if (msg === "STATUS_ATUALIZANDO_SISTEMA" || msg === "ERRO_ATUALIZACAO") {
+            ultimoEstadoPortao = ""; // Zera a memória para o app reconhecer a volta do ESP
             console.log(`\nOTA PORTÃO: ${msg}\n`);
             sseClients.forEach(c => c.res.write(`data: PORTAO_${msg}\n\n`));
         }
@@ -66,6 +67,7 @@ client.on('message', (topic, message) => {
     }
     else if (topic === TOPIC_STATUS_BOMBA) {
         if (msg === "STATUS_ATUALIZANDO_BOMBA" || msg === "ERRO_ATUALIZACAO_BOMBA") {
+            ultimoEstadoBomba = ""; // Zera a memória para o app reconhecer a volta do ESP
             console.log(`\nOTA BOMBA: ${msg}\n`);
             sseClients.forEach(c => c.res.write(`data: ${msg}\n\n`));
         }

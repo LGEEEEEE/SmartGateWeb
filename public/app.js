@@ -222,6 +222,7 @@ function conectarSSE() {
             document.getElementById('bombaIndicator').style.borderColor = "#10b981";
             document.getElementById('bombaIndicator').style.boxShadow = "0 0 20px rgba(16, 185, 129, 0.4)";
             document.getElementById('bombaIcon').style.color = "#10b981";
+            verificarFimUpdate(); // Adicionado aqui
         }
         else if (msg === "BOMBA_DESLIGADA") {
             document.getElementById('bombaStatusText').innerText = "Desligada";
@@ -229,6 +230,7 @@ function conectarSSE() {
             document.getElementById('bombaIndicator').style.borderColor = "#333";
             document.getElementById('bombaIndicator').style.boxShadow = "none";
             document.getElementById('bombaIcon').style.color = "#555";
+            verificarFimUpdate(); // Adicionado aqui
         }
         
         // STATUS REAL DO PORTÃO:
