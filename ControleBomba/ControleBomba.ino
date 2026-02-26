@@ -1,6 +1,6 @@
 /*
   FICHEIRO: ControleBomba.ino
-  DESCRIÇÃO: Firmware SmartPump V3.2 - Lógica Segura, OTA, WatchDog Lógico e Prevenção de Zumbis.
+  DESCRIÇÃO: Firmware SmartPump V3.3 - Lógica Segura, OTA, WatchDog Lógico e Prevenção de Zumbis (Blindado contra quedas).
 */
 
 #include <WiFi.h>
@@ -25,7 +25,7 @@ int tentativasFalhas = 0;
 
 // --- HARDWARE DA BOMBA ---
 const int PINO_RELE_REAL = 18;  
-const int PINO_FANTASMA = 23;   
+const int PINO_FANTASMA = 23;
 const int PINO_LED = 2;         
 const int PINO_RESET_CONFIG = 0;
 
@@ -120,7 +120,7 @@ void realizarUpdateFirmwareBomba() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- A INICIAR SMART PUMP V3.2 (ANTI-ZOMBIE) ---");
+  Serial.println("\n\n--- A INICIAR SMART PUMP V3.3 (BLINDADO) ---");
   deviceID = "Bomba_" + getDeviceID();
   Serial.printf("[SYSTEM] Device ID: %s\n", deviceID.c_str());
   
@@ -132,7 +132,7 @@ void setup() {
   pinMode(PINO_RESET_CONFIG, INPUT_PULLUP);
 
   preferences.begin("pump_config", false);
-
+  
   if (digitalRead(PINO_RESET_CONFIG) == LOW) {
     Serial.println("[RESET] Botão BOOT detetado! A limpar Wi-Fi...");
     for(int i=0; i<5; i++) { digitalWrite(PINO_LED, !digitalRead(PINO_LED)); delay(100); }
@@ -153,13 +153,15 @@ void setup() {
 
   esp_task_wdt_config_t wdt_config = { .timeout_ms = WDT_TIMEOUT * 1000, .idle_core_mask = 0, .trigger_panic = true };
   esp_task_wdt_deinit(); 
-  esp_task_wdt_init(&wdt_config); 
+  esp_task_wdt_init(&wdt_config);
   esp_task_wdt_add(NULL); 
 }
 
+// --- NOVA LÓGICA DE LOOP BLINDADA ---
 void loop() {
-  esp_task_wdt_reset();
+  esp_task_wdt_reset(); // Alimenta o cão de guarda
   
+  // Lógica de reset físico
   if (digitalRead(PINO_RESET_CONFIG) == LOW) {
     unsigned long tempoInicio = millis();
     bool resetar = true;
@@ -175,6 +177,26 @@ void loop() {
     dnsServer.processNextRequest(); 
     server.handleClient();
   } else {
+    // --- VACINA 4: Monitoramento Ativo de Wi-Fi ---
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[WIFI] Conexão perdida! Tentando reconectar...");
+      WiFi.disconnect();
+      WiFi.reconnect();
+      
+      int tentativasReconexao = 0;
+      while (WiFi.status() != WL_CONNECTED && tentativasReconexao < 40) { // Aguarda 20 segundos
+        delay(500);
+        Serial.print("x");
+        tentativasReconexao++;
+        esp_task_wdt_reset();
+      }
+      
+      if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("\n[ERRO CRÍTICO] Falha ao reconectar Wi-Fi. Puxando a tomada...");
+        ESP.restart(); // Garante que a bomba volte online
+      }
+    }
+
     if (!client.connected()) reconnectMQTT();
     client.loop();
     
@@ -187,19 +209,24 @@ void loop() {
   }
 }
 
+// --- NOVA LÓGICA DE SETUP DE OPERAÇÃO ---
 void setupModoOperacao() {
   emModoConfig = false;
   WiFi.mode(WIFI_STA);
-
-  // --- VACINA 1: Auto-Reconnect e Proteção da Memória Flash ---
+  
   WiFi.setAutoReconnect(true); 
   WiFi.persistent(false);      
 
   WiFi.begin(ssid_str.c_str(), pass_str.c_str());
 
   int tentativas = 0;
-  while (WiFi.status() != WL_CONNECTED && tentativas < 25) { 
-    delay(500); Serial.print("."); tentativas++; esp_task_wdt_reset(); 
+  // Tolerância estendida para 60 tentativas (30 segundos)
+  while (WiFi.status() != WL_CONNECTED) { 
+    delay(500); Serial.print("."); tentativas++; esp_task_wdt_reset();
+    if (tentativas > 60) {
+        Serial.println("\n[ERRO FATAL] Tempo limite do Wi-Fi excedido. Reiniciando a placa...");
+        ESP.restart();
+    }
   }
   
   if (WiFi.status() == WL_CONNECTED) {
@@ -209,10 +236,7 @@ void setupModoOperacao() {
     espClient.setInsecure();
     client.setServer(MQTT_SERVER_DEFAULT, 8883); 
     client.setCallback(callbackMQTT);
-  } else {
-    Serial.println("\n[WIFI] Falha na conexão. A voltar para Modo AP.");
-    setupModoConfiguracao();
-  }
+  } 
 }
 
 void reconnectMQTT() {
@@ -223,8 +247,6 @@ void reconnectMQTT() {
   lastMqttAttempt = millis();
 
   Serial.println("[MQTT] A tentar ligar...");
-
-  // --- VACINA 2: Matar "Conexões Zumbi" ---
   espClient.stop(); 
   
   String clientIdStr = "ESP32_Bomba_" + String(random(0xffff), HEX);
@@ -239,7 +261,7 @@ void reconnectMQTT() {
       Serial.print(client.state());
       Serial.print(" | Tentativas: ");
       Serial.println(tentativasFalhas);
-
+      
       if (tentativasFalhas >= MAX_TENTATIVAS_MQTT) {
           Serial.println("\n[ERRO CRÍTICO] Falhas sucessivas no servidor. A reiniciar a placa...\n");
           delay(1000); 
@@ -250,14 +272,12 @@ void reconnectMQTT() {
 
 void callbackMQTT(char* topic, byte* payload, unsigned int length) {
   String msg = "";
-
-  // --- VACINA 3: Prevenir Fragmentação de Memória RAM ---
-  msg.reserve(length + 1); 
-
+  msg.reserve(length + 1);
   for(int i=0; i<length; i++) msg += (char)payload[i];
   
   Serial.print("[MQTT RX] Comando recebido: ");
   Serial.println(msg);
+  
   if (msg.startsWith("LIGAR_BOMBA")) {
       controlarBomba(true);
   } 
@@ -271,7 +291,8 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length) {
 
 void setupModoConfiguracao() {
   emModoConfig = true;
-  WiFi.disconnect(true); delay(100);
+  WiFi.disconnect(true);
+  delay(100);
   WiFi.mode(WIFI_AP);
   IPAddress apIP(192, 168, 4, 1);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
@@ -279,9 +300,11 @@ void setupModoConfiguracao() {
   
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+  
   auto pageHandler = []() {
     int n = WiFi.scanNetworks();
-    String opcoesWifi = (n == 0) ? "<option value=''>Nenhuma rede encontrada</option>" : "";
+    String opcoesWifi = (n == 0) ?
+    "<option value=''>Nenhuma rede encontrada</option>" : "";
     for (int i = 0; i < n; ++i) {
         opcoesWifi += "<option value='" + WiFi.SSID(i) + "'>" + WiFi.SSID(i) + " (" + String(WiFi.RSSI(i)) + "dBm)</option>";
     }
@@ -297,7 +320,8 @@ void setupModoConfiguracao() {
     .container { background: #1e293b; padding: 30px; border-radius: 12px; width: 100%; max-width: 350px; text-align: center; }
     h2 { color: #3b82f6; }
     label { display: block; margin: 15px 0 5px; text-align: left; }
-    select, input { width: 100%; padding: 10px; border-radius: 8px; border: none; outline: none; box-sizing: border-box; }
+    select, input { width: 100%; padding: 10px; border-radius: 8px; border: none; outline: none; box-sizing: border-box; 
+    }
     button { margin-top: 25px; width: 100%; background: #3b82f6; color: white; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
   </style>
 </head>
@@ -331,6 +355,7 @@ void setupModoConfiguracao() {
 
   server.on("/save", HTTP_POST, []() {
     if (server.arg("ssid").length() > 0) {
+     
       preferences.putString("ssid", server.arg("ssid"));
       preferences.putString("pass", server.arg("pass"));
       server.send(200, "text/html", "<html><body style='background:#0f172a;color:#10b981;text-align:center;margin-top:20vh;'><h2>Salvo! A placa vai reiniciar.</h2></body></html>");
