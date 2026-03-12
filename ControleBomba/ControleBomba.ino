@@ -8,15 +8,15 @@
 #define URL_FIRMWARE "https://raw.githubusercontent.com/LGEEEEEE/SmartGateWeb/main/ControleBomba/build/esp32.esp32.esp32doit-devkit-v1/ControleBomba.ino.bin"
 
 // --- TÓPICOS DA BOMBA ---
-// Definidos aqui para não precisar alterar o secrets.h do portão
 #define MQTT_TOPIC_COMMAND_BOMBA "projeto_LG/casa/bomba/cmd"
 #define MQTT_TOPIC_STATUS_BOMBA "projeto_LG/casa/bomba/status"
 
 // --- HARDWARE ---
 const int PINO_RELE_BOMBA = 18; // Relé que aciona a contatora da bomba
 
-// --- LÓGICA DE TEMPO ---
-const unsigned long TEMPO_MAXIMO_LIGADA = 15UL * 60UL * 1000UL; // 15 minutos em milissegundos
+// --- LÓGICA DE TEMPO DINÂMICO ---
+unsigned long tempoMaximoLigada = 15UL * 60UL * 1000UL; // Variável dinâmica, padrão 15 min em milissegundos
+int tempoMinutosAtual = 15;
 unsigned long tempoInicioBomba = 0;
 bool bombaLigada = false;
 
@@ -30,25 +30,32 @@ PubSubClient client(espClient);
 // --- FUNÇÃO DE STATUS ---
 void publicarEstado() {
   if (bombaLigada) {
-    client.publish(MQTT_TOPIC_STATUS_BOMBA, "BOMBA_LIGADA", true);
-    Serial.println("[STATUS] Enviado: BOMBA_LIGADA");
+    String payload = "BOMBA_LIGADA|" + String(tempoMinutosAtual);
+    client.publish(MQTT_TOPIC_STATUS_BOMBA, payload.c_str(), true);
+    Serial.println("[STATUS] Enviado: " + payload);
   } else {
     client.publish(MQTT_TOPIC_STATUS_BOMBA, "BOMBA_DESLIGADA", true);
     Serial.println("[STATUS] Enviado: BOMBA_DESLIGADA");
   }
 }
 
-// --- CONTROLE DA BOMBA ---
+// --- CONTROLE DA BOMBA (COM TRAVA DE IMPEDÂNCIA) ---
 void ligarBomba() {
-  digitalWrite(PINO_RELE_BOMBA, HIGH); // Ajuste para LOW se seu relé for ativo em nível baixo
+  pinMode(PINO_RELE_BOMBA, OUTPUT); // 1º: Transforma em saída
+  digitalWrite(PINO_RELE_BOMBA, HIGH); // 2º: Aciona o relé
+  
   bombaLigada = true;
   tempoInicioBomba = millis();
   publicarEstado();
-  Serial.println("\n>>> BOMBA LIGADA (Temporizador de 15 min iniciado) <<<");
+  Serial.print("\n>>> BOMBA LIGADA (Temporizador de ");
+  Serial.print(tempoMinutosAtual);
+  Serial.println(" min iniciado) <<<");
 }
 
 void desligarBomba() {
-  digitalWrite(PINO_RELE_BOMBA, LOW); // Ajuste para HIGH se seu relé for ativo em nível baixo
+  digitalWrite(PINO_RELE_BOMBA, LOW); // 1º: Corta o sinal do relé
+  pinMode(PINO_RELE_BOMBA, INPUT); // 2º: Volta para alta impedância por segurança
+  
   bombaLigada = false;
   publicarEstado();
   Serial.println("\n>>> BOMBA DESLIGADA <<<");
@@ -80,11 +87,10 @@ void realizarUpdateFirmware() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- INICIANDO SISTEMA SMART PUMP V1.0 ---");
+  Serial.println("\n\n--- INICIANDO SISTEMA SMART PUMP V2.0 ---");
 
-  pinMode(PINO_RELE_BOMBA, OUTPUT);
-  digitalWrite(PINO_RELE_BOMBA, LOW); // Garante que inicie desligada
-
+  // INICIA COMO INPUT: Evita que o relé atraque sozinho durante o boot do ESP32
+  pinMode(PINO_RELE_BOMBA, INPUT);
   setup_wifi();
 
   espClient.setInsecure(); // MANDATÓRIO PARA O HIVEMQ
@@ -101,7 +107,6 @@ void setup_wifi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int tentativasWifi = 0;
-  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -124,7 +129,21 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println(mensagem);
 
   // --- LÓGICA DE COMANDOS DA BOMBA ---
-  if (mensagem == "LIGAR_BOMBA") {
+  if (mensagem.startsWith("LIGAR_BOMBA")) {
+    int indicePipe = mensagem.indexOf('|');
+    
+    // Extrai o tempo enviado pelo web app, ou usa 15 min como fallback
+    if (indicePipe > 0) {
+      String tempoStr = mensagem.substring(indicePipe + 1);
+      tempoMinutosAtual = tempoStr.toInt();
+      if(tempoMinutosAtual <= 0) tempoMinutosAtual = 15; 
+    } else {
+      tempoMinutosAtual = 15;
+    }
+    
+    // Calcula o tempo máximo em milissegundos
+    tempoMaximoLigada = tempoMinutosAtual * 60UL * 1000UL;
+    
     ligarBomba();
   } 
   else if (mensagem == "DESLIGAR_BOMBA") {
@@ -142,9 +161,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 void reconnect() {
   if (!client.connected()) {
     Serial.print("[MQTT] Reconectando...");
-    // Importante: Prefixo diferente do portão para evitar conflito no HiveMQ
     String clientId = "ESP32_BOMBA_" + String(random(0xffff), HEX);
-    
     if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
       Serial.println(" OK!");
       tentativasFalhas = 0;
@@ -166,11 +183,10 @@ void loop() {
   if (!client.connected()) reconnect();
   client.loop();
 
-  // --- CONTROLE DE TEMPO (15 MINUTOS) ---
+  // --- CONTROLE DE TEMPO DINÂMICO ---
   if (bombaLigada) {
-    // Usa millis() para não travar o código com delay()
-    if (millis() - tempoInicioBomba >= TEMPO_MAXIMO_LIGADA) {
-      Serial.println("[TIMER] Tempo máximo atingido. Desligando bomba automaticamente.");
+    if (millis() - tempoInicioBomba >= tempoMaximoLigada) {
+      Serial.println("[TIMER] Tempo configurado atingido. Desligando bomba automaticamente.");
       desligarBomba();
     }
   }

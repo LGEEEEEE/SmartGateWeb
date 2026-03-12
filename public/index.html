@@ -53,6 +53,16 @@
                     <div id="bombaIndicator" class="status-ring"><i id="bombaIcon" class="ph ph-power"></i></div>
                     <p id="bombaStatusText">Desligada</p>
                 </div>
+                
+                <div style="width: 100%; margin-bottom: 15px;">
+                    <select id="tempoBomba" style="width: 100%; padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
+                        <option value="5">💧 5 Minutos</option>
+                        <option value="15" selected>💧 15 Minutos</option>
+                        <option value="30">💧 30 Minutos</option>
+                        <option value="60">💧 1 Hora</option>
+                    </select>
+                </div>
+
                 <div class="bomba-controls">
                     <button class="btn-device btn-on" onclick="controlarBomba('LIGAR_BOMBA')">
                         <i class="ph ph-play"></i> Ligar

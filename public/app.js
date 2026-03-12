@@ -101,15 +101,23 @@ async function abrirPortao() {
 }
 
 // --- CONTROLES BOMBA ---
-async function controlarBomba(comando) {
+async function controlarBomba(comandoBase) {
     if(navigator.vibrate) navigator.vibrate(50);
+    
+    let comandoFinal = comandoBase;
+    
+    if (comandoBase === "LIGAR_BOMBA") {
+        const tempo = document.getElementById('tempoBomba').value;
+        comandoFinal = `LIGAR_BOMBA|${tempo}`;
+    }
+
     try {
         await fetch('/api/acionar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
-            body: JSON.stringify({ dispositivo: "bomba", comando_customizado: comando })
+            body: JSON.stringify({ dispositivo: "bomba", comando_customizado: comandoFinal })
         });
-        showToast(comando === "LIGAR_BOMBA" ? "Ligando bomba..." : "Desligando bomba...", "info");
+        showToast(comandoBase === "LIGAR_BOMBA" ? "Ligando bomba..." : "Desligando bomba...", "info");
     } catch (e) { showToast("Erro ao comunicar com a bomba", "error"); }
 }
 
@@ -216,13 +224,18 @@ function conectarSSE() {
         const msg = event.data;
         
         // STATUS DA BOMBA:
-        if (msg === "BOMBA_LIGADA") {
-            document.getElementById('bombaStatusText').innerText = "Ligada (15 min)";
+        if (msg.startsWith("BOMBA_LIGADA")) {
+            let tempoAtivo = "15"; 
+            if (msg.includes("|")) {
+                tempoAtivo = msg.split("|")[1]; 
+            }
+            
+            document.getElementById('bombaStatusText').innerText = `Ligada (${tempoAtivo} min)`;
             document.getElementById('bombaStatusText').style.color = "#10b981"; 
             document.getElementById('bombaIndicator').style.borderColor = "#10b981";
             document.getElementById('bombaIndicator').style.boxShadow = "0 0 20px rgba(16, 185, 129, 0.4)";
             document.getElementById('bombaIcon').style.color = "#10b981";
-            verificarFimUpdate(); // Adicionado aqui
+            verificarFimUpdate();
         }
         else if (msg === "BOMBA_DESLIGADA") {
             document.getElementById('bombaStatusText').innerText = "Desligada";
@@ -230,7 +243,7 @@ function conectarSSE() {
             document.getElementById('bombaIndicator').style.borderColor = "#333";
             document.getElementById('bombaIndicator').style.boxShadow = "none";
             document.getElementById('bombaIcon').style.color = "#555";
-            verificarFimUpdate(); // Adicionado aqui
+            verificarFimUpdate(); 
         }
         
         // STATUS REAL DO PORTÃO:
