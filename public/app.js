@@ -15,6 +15,10 @@ const TEMPO_CICLO = 15000; // 15 Segundos
 let ultimaDirecao = "FECHANDO"; 
 let emProcessoDeUpdate = false; 
 
+// --- VARIÁVEIS DE ESTADO BOMBA (NOVO) ---
+let bombaCountdownTimer = null;
+let tempoRestanteBomba = 0; // Contagem em segundos
+
 // --- INICIALIZAÇÃO ---
 const savedToken = localStorage.getItem('gate_token');
 const savedName = localStorage.getItem('gate_username');
@@ -100,7 +104,7 @@ async function abrirPortao() {
     } catch (e) { showToast("Erro ao enviar comando", "error"); }
 }
 
-// --- CONTROLES BOMBA ---
+// --- CONTROLES DA BOMBA E CONTAGEM REGRESSIVA ---
 async function controlarBomba(comandoBase) {
     if(navigator.vibrate) navigator.vibrate(50);
     
@@ -120,6 +124,42 @@ async function controlarBomba(comandoBase) {
         showToast(comandoBase === "LIGAR_BOMBA" ? "Ligando bomba..." : "Desligando bomba...", "info");
     } catch (e) { showToast("Erro ao comunicar com a bomba", "error"); }
 }
+
+// Funções do Cronômetro Visual (NOVO)
+function iniciarContagemBomba(minutos) {
+    if (bombaCountdownTimer) clearInterval(bombaCountdownTimer);
+    
+    tempoRestanteBomba = minutos * 60; // Converte para segundos
+    atualizarTextoContagem(); // Atualiza a tela imediatamente na primeira vez
+    
+    bombaCountdownTimer = setInterval(() => {
+        tempoRestanteBomba--;
+        if (tempoRestanteBomba <= 0) {
+            clearInterval(bombaCountdownTimer);
+            document.getElementById('bombaStatusText').innerText = "Finalizando...";
+        } else {
+            atualizarTextoContagem();
+        }
+    }, 1000);
+}
+
+function atualizarTextoContagem() {
+    const min = Math.floor(tempoRestanteBomba / 60);
+    const seg = tempoRestanteBomba % 60;
+    // Formata para ficar com dois dígitos: "05:09"
+    const tempoFormatado = `${min.toString().padStart(2, '0')}:${seg.toString().padStart(2, '0')}`;
+    document.getElementById('bombaStatusText').innerText = `Ligada (${tempoFormatado})`;
+}
+
+function pararContagemBomba() {
+    if (bombaCountdownTimer) clearInterval(bombaCountdownTimer);
+    document.getElementById('bombaStatusText').innerText = "Desligada";
+    document.getElementById('bombaStatusText').style.color = "#94a3b8"; 
+    document.getElementById('bombaIndicator').style.borderColor = "#333";
+    document.getElementById('bombaIndicator').style.boxShadow = "none";
+    document.getElementById('bombaIcon').style.color = "#555";
+}
+
 
 async function solicitarUpdate(dispositivo) {
     let nomeDispositivo = dispositivo === 'portao' ? 'Portão' : 'Bomba';
@@ -230,7 +270,9 @@ function conectarSSE() {
                 tempoAtivo = msg.split("|")[1]; 
             }
             
-            document.getElementById('bombaStatusText').innerText = `Ligada (${tempoAtivo} min)`;
+            // Inicia o cronômetro visual com o tempo recebido
+            iniciarContagemBomba(parseInt(tempoAtivo));
+            
             document.getElementById('bombaStatusText').style.color = "#10b981"; 
             document.getElementById('bombaIndicator').style.borderColor = "#10b981";
             document.getElementById('bombaIndicator').style.boxShadow = "0 0 20px rgba(16, 185, 129, 0.4)";
@@ -238,11 +280,8 @@ function conectarSSE() {
             verificarFimUpdate();
         }
         else if (msg === "BOMBA_DESLIGADA") {
-            document.getElementById('bombaStatusText').innerText = "Desligada";
-            document.getElementById('bombaStatusText').style.color = "#94a3b8"; 
-            document.getElementById('bombaIndicator').style.borderColor = "#333";
-            document.getElementById('bombaIndicator').style.boxShadow = "none";
-            document.getElementById('bombaIcon').style.color = "#555";
+            // Para o cronômetro visual e zera a UI
+            pararContagemBomba();
             verificarFimUpdate(); 
         }
         
