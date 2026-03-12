@@ -11,13 +11,13 @@ const progressLabel = document.getElementById('progressLabel');
 // --- VARIÁVEIS DE ESTADO PORTÃO ---
 let estadoAtual = "DESCONHECIDO"; 
 let timerMovimento = null;
-const TEMPO_CICLO = 15000; // 15 Segundos
+const TEMPO_CICLO = 15000; 
 let ultimaDirecao = "FECHANDO"; 
 let emProcessoDeUpdate = false; 
 
-// --- VARIÁVEIS DE ESTADO BOMBA (NOVO) ---
+// --- VARIÁVEIS DE ESTADO BOMBA ---
 let bombaCountdownTimer = null;
-let tempoRestanteBomba = 0; // Contagem em segundos
+let tempoRestanteBomba = 0; // Contagem exata em segundos
 
 // --- INICIALIZAÇÃO ---
 const savedToken = localStorage.getItem('gate_token');
@@ -72,14 +72,23 @@ async function fazerLogin() {
     btn.innerHTML = `ENTRAR <i class="ph ph-arrow-right"></i>`; btn.disabled = false;
 }
 
+// --- CARREGAMENTO DO APP (ATUALIZADO) ---
 function mostrarApp() {
     loginScreen.classList.add('hidden');
     appScreen.classList.remove('hidden');
     conectarSSE();
+    
+    // Pede status atualizado do Portão
     fetch('/api/acionar', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
         body: JSON.stringify({ dispositivo: "portao", comando_customizado: "CHECAR_STATUS" }) 
-    }).catch(e => console.log("Erro inicial"));
+    }).catch(e => console.log("Erro inicial portão"));
+
+    // Pede status atualizado da Bomba para resgatar os segundos exatos restantes
+    fetch('/api/acionar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
+        body: JSON.stringify({ dispositivo: "bomba", comando_customizado: "CHECAR_STATUS" }) 
+    }).catch(e => console.log("Erro inicial bomba"));
 }
 
 function fazerLogout() {
@@ -125,12 +134,11 @@ async function controlarBomba(comandoBase) {
     } catch (e) { showToast("Erro ao comunicar com a bomba", "error"); }
 }
 
-// Funções do Cronômetro Visual (NOVO)
-function iniciarContagemBomba(minutos) {
+function iniciarContagemBomba(segundosRestantes) {
     if (bombaCountdownTimer) clearInterval(bombaCountdownTimer);
     
-    tempoRestanteBomba = minutos * 60; // Converte para segundos
-    atualizarTextoContagem(); // Atualiza a tela imediatamente na primeira vez
+    tempoRestanteBomba = segundosRestantes; 
+    atualizarTextoContagem(); 
     
     bombaCountdownTimer = setInterval(() => {
         tempoRestanteBomba--;
@@ -146,7 +154,6 @@ function iniciarContagemBomba(minutos) {
 function atualizarTextoContagem() {
     const min = Math.floor(tempoRestanteBomba / 60);
     const seg = tempoRestanteBomba % 60;
-    // Formata para ficar com dois dígitos: "05:09"
     const tempoFormatado = `${min.toString().padStart(2, '0')}:${seg.toString().padStart(2, '0')}`;
     document.getElementById('bombaStatusText').innerText = `Ligada (${tempoFormatado})`;
 }
@@ -210,7 +217,7 @@ function iniciarAnimacao(novoEstado) {
     ultimaDirecao = novoEstado; 
     
     let texto = novoEstado === "ABRINDO" ? "Abrindo... (15s)" : "Fechando... (15s)";
-    let cor = "#f59e0b"; // Laranja
+    let cor = "#f59e0b"; 
     let icone = novoEstado === "ABRINDO" ? "ph-arrows-out-line-vertical" : "ph-arrows-in-line-vertical";
     
     atualizarUI(texto, cor, icone, true);
@@ -263,15 +270,23 @@ function conectarSSE() {
     evtSource.onmessage = function(event) {
         const msg = event.data;
         
-        // STATUS DA BOMBA:
+        // STATUS DA BOMBA (ATUALIZADO):
         if (msg.startsWith("BOMBA_LIGADA")) {
             let tempoAtivo = "15"; 
+            let segundosRestantes = null;
+
             if (msg.includes("|")) {
-                tempoAtivo = msg.split("|")[1]; 
+                let partes = msg.split("|");
+                tempoAtivo = partes[1]; 
+                if (partes.length > 2) {
+                    segundosRestantes = parseInt(partes[2]); // Segundos exatos que o ESP32 mandou
+                }
             }
             
-            // Inicia o cronômetro visual com o tempo recebido
-            iniciarContagemBomba(parseInt(tempoAtivo));
+            // Se não veio segundos exatos, usa o total selecionado como backup
+            let segundosParaContar = segundosRestantes !== null ? segundosRestantes : parseInt(tempoAtivo) * 60;
+            
+            iniciarContagemBomba(segundosParaContar);
             
             document.getElementById('bombaStatusText').style.color = "#10b981"; 
             document.getElementById('bombaIndicator').style.borderColor = "#10b981";
@@ -280,7 +295,6 @@ function conectarSSE() {
             verificarFimUpdate();
         }
         else if (msg === "BOMBA_DESLIGADA") {
-            // Para o cronômetro visual e zera a UI
             pararContagemBomba();
             verificarFimUpdate(); 
         }

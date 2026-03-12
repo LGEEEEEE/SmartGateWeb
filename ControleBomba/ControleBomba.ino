@@ -15,7 +15,7 @@
 const int PINO_RELE_BOMBA = 18; // Relé que aciona a contatora da bomba
 
 // --- LÓGICA DE TEMPO DINÂMICO ---
-unsigned long tempoMaximoLigada = 15UL * 60UL * 1000UL; // Variável dinâmica, padrão 15 min em milissegundos
+unsigned long tempoMaximoLigada = 15UL * 60UL * 1000UL; 
 int tempoMinutosAtual = 15;
 unsigned long tempoInicioBomba = 0;
 bool bombaLigada = false;
@@ -27,10 +27,19 @@ int tentativasFalhas = 0;
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
 
-// --- FUNÇÃO DE STATUS ---
+// --- FUNÇÃO DE STATUS (ATUALIZADA PARA ENVIAR SEGUNDOS RESTANTES) ---
 void publicarEstado() {
   if (bombaLigada) {
-    String payload = "BOMBA_LIGADA|" + String(tempoMinutosAtual);
+    unsigned long tempoDecorrido = millis() - tempoInicioBomba;
+    unsigned long tempoRestanteSegundos = 0;
+    
+    // Calcula quantos segundos faltam, garantindo que a matemática não dê erro
+    if (tempoMaximoLigada > tempoDecorrido) {
+      tempoRestanteSegundos = (tempoMaximoLigada - tempoDecorrido) / 1000;
+    }
+
+    // Envia no formato: BOMBA_LIGADA|MinutosTotais|SegundosRestantes
+    String payload = "BOMBA_LIGADA|" + String(tempoMinutosAtual) + "|" + String(tempoRestanteSegundos);
     client.publish(MQTT_TOPIC_STATUS_BOMBA, payload.c_str(), true);
     Serial.println("[STATUS] Enviado: " + payload);
   } else {
@@ -41,8 +50,8 @@ void publicarEstado() {
 
 // --- CONTROLE DA BOMBA (COM TRAVA DE IMPEDÂNCIA) ---
 void ligarBomba() {
-  pinMode(PINO_RELE_BOMBA, OUTPUT); // 1º: Transforma em saída
-  digitalWrite(PINO_RELE_BOMBA, HIGH); // 2º: Aciona o relé
+  pinMode(PINO_RELE_BOMBA, OUTPUT); 
+  digitalWrite(PINO_RELE_BOMBA, HIGH); 
   
   bombaLigada = true;
   tempoInicioBomba = millis();
@@ -53,8 +62,8 @@ void ligarBomba() {
 }
 
 void desligarBomba() {
-  digitalWrite(PINO_RELE_BOMBA, LOW); // 1º: Corta o sinal do relé
-  pinMode(PINO_RELE_BOMBA, INPUT); // 2º: Volta para alta impedância por segurança
+  digitalWrite(PINO_RELE_BOMBA, LOW); 
+  pinMode(PINO_RELE_BOMBA, INPUT); 
   
   bombaLigada = false;
   publicarEstado();
@@ -87,13 +96,12 @@ void realizarUpdateFirmware() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- INICIANDO SISTEMA SMART PUMP V2.0 ---");
+  Serial.println("\n\n--- INICIANDO SISTEMA SMART PUMP V2.1 ---");
 
-  // INICIA COMO INPUT: Evita que o relé atraque sozinho durante o boot do ESP32
   pinMode(PINO_RELE_BOMBA, INPUT);
   setup_wifi();
 
-  espClient.setInsecure(); // MANDATÓRIO PARA O HIVEMQ
+  espClient.setInsecure(); 
   client.setServer(MQTT_SERVER, MQTT_PORT);
   client.setCallback(callback);
 }
@@ -132,7 +140,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   if (mensagem.startsWith("LIGAR_BOMBA")) {
     int indicePipe = mensagem.indexOf('|');
     
-    // Extrai o tempo enviado pelo web app, ou usa 15 min como fallback
     if (indicePipe > 0) {
       String tempoStr = mensagem.substring(indicePipe + 1);
       tempoMinutosAtual = tempoStr.toInt();
@@ -141,9 +148,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
       tempoMinutosAtual = 15;
     }
     
-    // Calcula o tempo máximo em milissegundos
     tempoMaximoLigada = tempoMinutosAtual * 60UL * 1000UL;
-    
     ligarBomba();
   } 
   else if (mensagem == "DESLIGAR_BOMBA") {
@@ -166,7 +171,7 @@ void reconnect() {
       Serial.println(" OK!");
       tentativasFalhas = 0;
       client.subscribe(MQTT_TOPIC_COMMAND_BOMBA);
-      publicarEstado(); // Atualiza o dashboard logo que conecta
+      publicarEstado(); 
     } else {
       tentativasFalhas++;
       Serial.print(" Falha. ");
@@ -183,7 +188,6 @@ void loop() {
   if (!client.connected()) reconnect();
   client.loop();
 
-  // --- CONTROLE DE TEMPO DINÂMICO ---
   if (bombaLigada) {
     if (millis() - tempoInicioBomba >= tempoMaximoLigada) {
       Serial.println("[TIMER] Tempo configurado atingido. Desligando bomba automaticamente.");
