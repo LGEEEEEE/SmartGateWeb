@@ -17,7 +17,8 @@ let emProcessoDeUpdate = false;
 
 // --- VARIÁVEIS DE ESTADO BOMBA ---
 let bombaCountdownTimer = null;
-let tempoRestanteBomba = 0; // Contagem exata em segundos
+let tempoRestanteBomba = 0; 
+let tipoContagemAtual = "LIGADA"; // Pode ser "LIGADA" ou "ESPERA"
 
 // --- INICIALIZAÇÃO ---
 const savedToken = localStorage.getItem('gate_token');
@@ -72,19 +73,16 @@ async function fazerLogin() {
     btn.innerHTML = `ENTRAR <i class="ph ph-arrow-right"></i>`; btn.disabled = false;
 }
 
-// --- CARREGAMENTO DO APP (ATUALIZADO) ---
 function mostrarApp() {
     loginScreen.classList.add('hidden');
     appScreen.classList.remove('hidden');
     conectarSSE();
     
-    // Pede status atualizado do Portão
     fetch('/api/acionar', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
         body: JSON.stringify({ dispositivo: "portao", comando_customizado: "CHECAR_STATUS" }) 
     }).catch(e => console.log("Erro inicial portão"));
 
-    // Pede status atualizado da Bomba para resgatar os segundos exatos restantes
     fetch('/api/acionar', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
         body: JSON.stringify({ dispositivo: "bomba", comando_customizado: "CHECAR_STATUS" }) 
@@ -114,14 +112,35 @@ async function abrirPortao() {
 }
 
 // --- CONTROLES DA BOMBA E CONTAGEM REGRESSIVA ---
+function toggleModoBomba() {
+    const modo = document.querySelector('input[name="modoBomba"]:checked').value;
+    const divDescanso = document.getElementById('divTempoDescanso');
+    if(modo === 'intercalado') {
+        divDescanso.style.display = 'block';
+    } else {
+        divDescanso.style.display = 'none';
+    }
+}
+
 async function controlarBomba(comandoBase) {
     if(navigator.vibrate) navigator.vibrate(50);
     
     let comandoFinal = comandoBase;
     
     if (comandoBase === "LIGAR_BOMBA") {
-        const tempo = document.getElementById('tempoBomba').value;
-        comandoFinal = `LIGAR_BOMBA|${tempo}`;
+        const tempoLigado = document.getElementById('tempoBomba').value;
+        const modo = document.querySelector('input[name="modoBomba"]:checked').value;
+        
+        if (modo === "intercalado") {
+            const tempoDesligado = document.getElementById('tempoDescanso').value;
+            comandoFinal = `LIGAR_BOMBA|${tempoLigado}|${tempoDesligado}`;
+            showToast("Iniciando ciclo intercalado...", "info");
+        } else {
+            comandoFinal = `LIGAR_BOMBA|${tempoLigado}|0`;
+            showToast("Ligando bomba...", "info");
+        }
+    } else {
+        showToast("Encerrando ciclo da bomba...", "info");
     }
 
     try {
@@ -130,21 +149,21 @@ async function controlarBomba(comandoBase) {
             headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
             body: JSON.stringify({ dispositivo: "bomba", comando_customizado: comandoFinal })
         });
-        showToast(comandoBase === "LIGAR_BOMBA" ? "Ligando bomba..." : "Desligando bomba...", "info");
     } catch (e) { showToast("Erro ao comunicar com a bomba", "error"); }
 }
 
-function iniciarContagemBomba(segundosRestantes) {
+function iniciarContagemBomba(segundosRestantes, tipo = "LIGADA") {
     if (bombaCountdownTimer) clearInterval(bombaCountdownTimer);
     
     tempoRestanteBomba = segundosRestantes; 
+    tipoContagemAtual = tipo;
     atualizarTextoContagem(); 
     
     bombaCountdownTimer = setInterval(() => {
         tempoRestanteBomba--;
         if (tempoRestanteBomba <= 0) {
             clearInterval(bombaCountdownTimer);
-            document.getElementById('bombaStatusText').innerText = "Finalizando...";
+            document.getElementById('bombaStatusText').innerText = "Alternando...";
         } else {
             atualizarTextoContagem();
         }
@@ -155,15 +174,21 @@ function atualizarTextoContagem() {
     const min = Math.floor(tempoRestanteBomba / 60);
     const seg = tempoRestanteBomba % 60;
     const tempoFormatado = `${min.toString().padStart(2, '0')}:${seg.toString().padStart(2, '0')}`;
-    document.getElementById('bombaStatusText').innerText = `Ligada (${tempoFormatado})`;
+    
+    if (tipoContagemAtual === "ESPERA") {
+        document.getElementById('bombaStatusText').innerText = `Em Pausa (${tempoFormatado})`;
+    } else {
+        document.getElementById('bombaStatusText').innerText = `Ligada (${tempoFormatado})`;
+    }
 }
 
 function pararContagemBomba() {
     if (bombaCountdownTimer) clearInterval(bombaCountdownTimer);
-    document.getElementById('bombaStatusText').innerText = "Desligada";
+    document.getElementById('bombaStatusText').innerText = "Desligada (Ciclo Parado)";
     document.getElementById('bombaStatusText').style.color = "#94a3b8"; 
     document.getElementById('bombaIndicator').style.borderColor = "#333";
     document.getElementById('bombaIndicator').style.boxShadow = "none";
+    document.getElementById('bombaIcon').className = "ph ph-power";
     document.getElementById('bombaIcon').style.color = "#555";
 }
 
@@ -270,7 +295,7 @@ function conectarSSE() {
     evtSource.onmessage = function(event) {
         const msg = event.data;
         
-        // STATUS DA BOMBA (ATUALIZADO):
+        // STATUS DA BOMBA (LIGADA):
         if (msg.startsWith("BOMBA_LIGADA")) {
             let tempoAtivo = "15"; 
             let segundosRestantes = null;
@@ -278,22 +303,43 @@ function conectarSSE() {
             if (msg.includes("|")) {
                 let partes = msg.split("|");
                 tempoAtivo = partes[1]; 
-                if (partes.length > 2) {
-                    segundosRestantes = parseInt(partes[2]); // Segundos exatos que o ESP32 mandou
-                }
+                if (partes.length > 2) { segundosRestantes = parseInt(partes[2]); }
             }
             
-            // Se não veio segundos exatos, usa o total selecionado como backup
             let segundosParaContar = segundosRestantes !== null ? segundosRestantes : parseInt(tempoAtivo) * 60;
+            iniciarContagemBomba(segundosParaContar, "LIGADA");
             
-            iniciarContagemBomba(segundosParaContar);
-            
-            document.getElementById('bombaStatusText').style.color = "#10b981"; 
+            document.getElementById('bombaStatusText').style.color = "#10b981"; // Verde
             document.getElementById('bombaIndicator').style.borderColor = "#10b981";
             document.getElementById('bombaIndicator').style.boxShadow = "0 0 20px rgba(16, 185, 129, 0.4)";
+            document.getElementById('bombaIcon').className = "ph ph-drop";
             document.getElementById('bombaIcon').style.color = "#10b981";
             verificarFimUpdate();
         }
+        
+        // STATUS DA BOMBA (EM ESPERA / PAUSA PARA DESCANSAR):
+        else if (msg.startsWith("BOMBA_ESPERA")) {
+            let tempoPausa = "60"; 
+            let segundosRestantes = null;
+
+            if (msg.includes("|")) {
+                let partes = msg.split("|");
+                tempoPausa = partes[1]; 
+                if (partes.length > 2) { segundosRestantes = parseInt(partes[2]); }
+            }
+            
+            let segundosParaContar = segundosRestantes !== null ? segundosRestantes : parseInt(tempoPausa) * 60;
+            iniciarContagemBomba(segundosParaContar, "ESPERA");
+            
+            document.getElementById('bombaStatusText').style.color = "#f59e0b"; // Amarelo
+            document.getElementById('bombaIndicator').style.borderColor = "#f59e0b";
+            document.getElementById('bombaIndicator').style.boxShadow = "0 0 20px rgba(245, 158, 11, 0.4)";
+            document.getElementById('bombaIcon').className = "ph ph-timer";
+            document.getElementById('bombaIcon').style.color = "#f59e0b";
+            verificarFimUpdate();
+        }
+        
+        // STATUS DA BOMBA (TOTALMENTE DESLIGADA):
         else if (msg === "BOMBA_DESLIGADA") {
             pararContagemBomba();
             verificarFimUpdate(); 

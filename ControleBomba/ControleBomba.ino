@@ -4,21 +4,22 @@
 #include <HTTPUpdate.h> 
 #include "secrets.h" 
 
-// --- CONFIGURAÇÃO OTA WEB (Ajuste a URL para o repositório da bomba) ---
 #define URL_FIRMWARE "https://raw.githubusercontent.com/LGEEEEEE/SmartGateWeb/main/ControleBomba/build/esp32.esp32.esp32doit-devkit-v1/ControleBomba.ino.bin"
-
-// --- TÓPICOS DA BOMBA ---
 #define MQTT_TOPIC_COMMAND_BOMBA "projeto_LG/casa/bomba/cmd"
 #define MQTT_TOPIC_STATUS_BOMBA "projeto_LG/casa/bomba/status"
 
-// --- HARDWARE ---
-const int PINO_RELE_BOMBA = 18; // Relé que aciona a contatora da bomba
+const int PINO_RELE_BOMBA = 18; 
 
-// --- LÓGICA DE TEMPO DINÂMICO ---
-unsigned long tempoMaximoLigada = 15UL * 60UL * 1000UL; 
-int tempoMinutosAtual = 15;
-unsigned long tempoInicioBomba = 0;
-bool bombaLigada = false;
+// --- LÓGICA DE MÁQUINA DE ESTADOS (BOMBA INTERCALADA) ---
+enum EstadoBomba { PARADA, LIGADA, ESPERA };
+EstadoBomba estadoAtual = PARADA;
+
+bool modoIntercalado = false;
+unsigned long tempoMaximoLigada = 0; 
+unsigned long tempoMaximoDesligada = 0; 
+int tempoMinutosAtual = 0;
+int tempoDescansoMinutosAtual = 0;
+unsigned long tempoInicioEstado = 0;
 
 // --- CONFIGURAÇÃO DE REINÍCIO ---
 const int MAX_TENTATIVAS_MQTT = 15;
@@ -27,52 +28,73 @@ int tentativasFalhas = 0;
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
 
-// --- FUNÇÃO DE STATUS (ATUALIZADA PARA ENVIAR SEGUNDOS RESTANTES) ---
+// --- FUNÇÕES DA BOMBA ---
 void publicarEstado() {
-  if (bombaLigada) {
-    unsigned long tempoDecorrido = millis() - tempoInicioBomba;
-    unsigned long tempoRestanteSegundos = 0;
+  if (estadoAtual == LIGADA) {
+    unsigned long decorrido = millis() - tempoInicioEstado;
+    unsigned long restante = (tempoMaximoLigada > decorrido) ? (tempoMaximoLigada - decorrido) / 1000 : 0;
     
-    // Calcula quantos segundos faltam, garantindo que a matemática não dê erro
-    if (tempoMaximoLigada > tempoDecorrido) {
-      tempoRestanteSegundos = (tempoMaximoLigada - tempoDecorrido) / 1000;
-    }
-
-    // Envia no formato: BOMBA_LIGADA|MinutosTotais|SegundosRestantes
-    String payload = "BOMBA_LIGADA|" + String(tempoMinutosAtual) + "|" + String(tempoRestanteSegundos);
+    String payload = "BOMBA_LIGADA|" + String(tempoMinutosAtual) + "|" + String(restante);
     client.publish(MQTT_TOPIC_STATUS_BOMBA, payload.c_str(), true);
-    Serial.println("[STATUS] Enviado: " + payload);
+    Serial.println("[STATUS] " + payload);
+    
+  } else if (estadoAtual == ESPERA) {
+    unsigned long decorrido = millis() - tempoInicioEstado;
+    unsigned long restante = (tempoMaximoDesligada > decorrido) ? (tempoMaximoDesligada - decorrido) / 1000 : 0;
+    
+    String payload = "BOMBA_ESPERA|" + String(tempoDescansoMinutosAtual) + "|" + String(restante);
+    client.publish(MQTT_TOPIC_STATUS_BOMBA, payload.c_str(), true);
+    Serial.println("[STATUS] " + payload);
+    
   } else {
     client.publish(MQTT_TOPIC_STATUS_BOMBA, "BOMBA_DESLIGADA", true);
-    Serial.println("[STATUS] Enviado: BOMBA_DESLIGADA");
+    Serial.println("[STATUS] BOMBA_DESLIGADA");
   }
 }
 
-// --- CONTROLE DA BOMBA (COM TRAVA DE IMPEDÂNCIA) ---
-void ligarBomba() {
-  pinMode(PINO_RELE_BOMBA, OUTPUT); 
-  digitalWrite(PINO_RELE_BOMBA, HIGH); 
-  
-  bombaLigada = true;
-  tempoInicioBomba = millis();
-  publicarEstado();
-  Serial.print("\n>>> BOMBA LIGADA (Temporizador de ");
-  Serial.print(tempoMinutosAtual);
-  Serial.println(" min iniciado) <<<");
+void acionarReleFisico(bool ligar) {
+  if (ligar) {
+    pinMode(PINO_RELE_BOMBA, OUTPUT); 
+    digitalWrite(PINO_RELE_BOMBA, HIGH); 
+  } else {
+    digitalWrite(PINO_RELE_BOMBA, LOW); 
+    pinMode(PINO_RELE_BOMBA, INPUT); 
+  }
 }
 
-void desligarBomba() {
-  digitalWrite(PINO_RELE_BOMBA, LOW); 
-  pinMode(PINO_RELE_BOMBA, INPUT); 
+void iniciarCiclo(int minLigado, int minDesligado) {
+  tempoMinutosAtual = minLigado;
+  tempoMaximoLigada = minLigado * 60UL * 1000UL;
   
-  bombaLigada = false;
+  if (minDesligado > 0) {
+    modoIntercalado = true;
+    tempoDescansoMinutosAtual = minDesligado;
+    tempoMaximoDesligada = minDesligado * 60UL * 1000UL;
+    Serial.printf("\n>>> MODO INTERCALADO: %d min Ligada / %d min Pausa <<<\n", minLigado, minDesligado);
+  } else {
+    modoIntercalado = false;
+    tempoDescansoMinutosAtual = 0;
+    tempoMaximoDesligada = 0;
+    Serial.printf("\n>>> MODO NORMAL: %d min Ligada <<<\n", minLigado);
+  }
+
+  estadoAtual = LIGADA;
+  tempoInicioEstado = millis();
+  acionarReleFisico(true);
   publicarEstado();
-  Serial.println("\n>>> BOMBA DESLIGADA <<<");
 }
 
-// --- FUNÇÃO DE UPDATE ---
+void pararCicloTotalmente() {
+  estadoAtual = PARADA;
+  modoIntercalado = false;
+  acionarReleFisico(false);
+  publicarEstado();
+  Serial.println("\n>>> CICLO DA BOMBA ENCERRADO <<<");
+}
+
+// --- FUNÇÃO DE UPDATE OTA ---
 void realizarUpdateFirmware() {
-  Serial.println("\n[UPDATE] Iniciando atualização OTA da Bomba...");
+  Serial.println("\n[UPDATE] Iniciando atualização OTA...");
   client.publish(MQTT_TOPIC_STATUS_BOMBA, "STATUS_ATUALIZANDO_BOMBA", true);
   
   WiFiClientSecure clientOTA;
@@ -81,22 +103,17 @@ void realizarUpdateFirmware() {
 
   switch (ret) {
     case HTTP_UPDATE_FAILED:
-      Serial.printf("[UPDATE] FALHA (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
       client.publish(MQTT_TOPIC_STATUS_BOMBA, "ERRO_ATUALIZACAO_BOMBA", true);
       break;
-    case HTTP_UPDATE_NO_UPDATES:
-      Serial.println("[UPDATE] Nenhuma atualização necessária.");
-      break;
-    case HTTP_UPDATE_OK:
-      Serial.println("[UPDATE] OK! Reiniciando...");
-      break;
+    case HTTP_UPDATE_NO_UPDATES: break;
+    case HTTP_UPDATE_OK: break;
   }
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- INICIANDO SISTEMA SMART PUMP V2.1 ---");
+  Serial.println("\n\n--- INICIANDO SMART PUMP V3.0 (INTERCALADO) ---");
 
   pinMode(PINO_RELE_BOMBA, INPUT);
   setup_wifi();
@@ -108,54 +125,46 @@ void setup() {
 
 void setup_wifi() {
   delay(10);
-  Serial.println();
-  Serial.print("[WIFI] Conectando a: ");
-  Serial.println(WIFI_SSID);
-
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int tentativasWifi = 0;
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-    tentativasWifi++;
-    if (tentativasWifi > 60) { 
-        Serial.println("\n[ERRO] WiFi timeout. Reiniciando...");
-        ESP.restart();
-    }
+    delay(500); tentativasWifi++;
+    if (tentativasWifi > 60) ESP.restart();
   }
-  Serial.println("\n[WIFI] Conectado!");
-  Serial.print("[WIFI] IP: ");
-  Serial.println(WiFi.localIP());
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
   String mensagem = "";
   for (int i = 0; i < length; i++) mensagem += (char)payload[i];
   
-  Serial.print("[MQTT] Mensagem recebida: ");
-  Serial.println(mensagem);
+  Serial.print("[MQTT] Mensagem: "); Serial.println(mensagem);
 
-  // --- LÓGICA DE COMANDOS DA BOMBA ---
+  // Comando chega como: LIGAR_BOMBA|60|120  (60 min ligado, 120 min descanso)
   if (mensagem.startsWith("LIGAR_BOMBA")) {
-    int indicePipe = mensagem.indexOf('|');
+    int tLigado = 15;
+    int tDesligado = 0;
     
-    if (indicePipe > 0) {
-      String tempoStr = mensagem.substring(indicePipe + 1);
-      tempoMinutosAtual = tempoStr.toInt();
-      if(tempoMinutosAtual <= 0) tempoMinutosAtual = 15; 
-    } else {
-      tempoMinutosAtual = 15;
+    int idx1 = mensagem.indexOf('|');
+    if (idx1 > 0) {
+      int idx2 = mensagem.indexOf('|', idx1 + 1);
+      if (idx2 > 0) {
+        tLigado = mensagem.substring(idx1 + 1, idx2).toInt();
+        tDesligado = mensagem.substring(idx2 + 1).toInt();
+      } else {
+        tLigado = mensagem.substring(idx1 + 1).toInt();
+      }
     }
     
-    tempoMaximoLigada = tempoMinutosAtual * 60UL * 1000UL;
-    ligarBomba();
+    if(tLigado <= 0) tLigado = 15;
+    if(tDesligado < 0) tDesligado = 0;
+
+    iniciarCiclo(tLigado, tDesligado);
   } 
   else if (mensagem == "DESLIGAR_BOMBA") {
-    desligarBomba();
+    pararCicloTotalmente();
   }
   else if (mensagem == "CHECAR_STATUS") {
-    Serial.println("[CMD] Check-up solicitado.");
     publicarEstado();
   }
   else if (mensagem == "ATUALIZAR_FIRMWARE") {
@@ -165,20 +174,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void reconnect() {
   if (!client.connected()) {
-    Serial.print("[MQTT] Reconectando...");
     String clientId = "ESP32_BOMBA_" + String(random(0xffff), HEX);
     if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
-      Serial.println(" OK!");
       tentativasFalhas = 0;
       client.subscribe(MQTT_TOPIC_COMMAND_BOMBA);
       publicarEstado(); 
     } else {
       tentativasFalhas++;
-      Serial.print(" Falha. ");
-      if (tentativasFalhas >= MAX_TENTATIVAS_MQTT) {
-         Serial.println("Reiniciando ESP32...");
-         delay(1000); ESP.restart();
-      }
+      if (tentativasFalhas >= MAX_TENTATIVAS_MQTT) ESP.restart();
       delay(5000);
     }
   }
@@ -188,10 +191,28 @@ void loop() {
   if (!client.connected()) reconnect();
   client.loop();
 
-  if (bombaLigada) {
-    if (millis() - tempoInicioBomba >= tempoMaximoLigada) {
-      Serial.println("[TIMER] Tempo configurado atingido. Desligando bomba automaticamente.");
-      desligarBomba();
+  // --- GERENCIADOR DO CICLO INTERCALADO ---
+  if (estadoAtual == LIGADA) {
+    if (millis() - tempoInicioEstado >= tempoMaximoLigada) {
+      if (modoIntercalado) {
+        Serial.println("[TIMER] Tempo esgotado. Entrando em modo ESPERA para resfriamento.");
+        estadoAtual = ESPERA;
+        tempoInicioEstado = millis();
+        acionarReleFisico(false); // Corta a energia
+        publicarEstado();
+      } else {
+        Serial.println("[TIMER] Fim do ciclo normal.");
+        pararCicloTotalmente();
+      }
+    }
+  } 
+  else if (estadoAtual == ESPERA) {
+    if (millis() - tempoInicioEstado >= tempoMaximoDesligada) {
+      Serial.println("[TIMER] Descanso concluído. Religando a bomba automaticamente!");
+      estadoAtual = LIGADA;
+      tempoInicioEstado = millis();
+      acionarReleFisico(true); // Liga a energia novamente
+      publicarEstado();
     }
   }
 }
