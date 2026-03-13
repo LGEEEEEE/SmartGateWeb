@@ -16,21 +16,34 @@ body {
     color: var(--text-main);
     font-family: 'Inter', sans-serif;
     margin: 0;
-    height: 100vh;
+    /* Substituído o height fixo e overflow hidden por min-height fluido */
+    min-height: 100vh;
     display: flex;
     justify-content: center;
-    overflow: hidden;
+    overflow-x: hidden; 
 }
 
 .screen {
     width: 100%;
-    height: 100%;
+    min-height: 100vh; /* Garante que ocupa pelo menos a tela toda */
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     position: absolute;
+    top: 0;
+    left: 0;
     transition: opacity 0.4s ease;
+    overflow-y: auto; /* Permite rolar para baixo se não couber na tela */
+    box-sizing: border-box;
+}
+
+#login-screen {
+    justify-content: center; /* Mantém o login bem no meio da tela */
+}
+
+#app-screen {
+    justify-content: flex-start; /* Faz o app começar do topo e descer naturalmente */
+    padding-bottom: 40px; 
 }
 
 .hidden {
@@ -49,6 +62,7 @@ body {
     max-width: 320px;
     text-align: center;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    margin: 20px 0; /* Espaço extra caso a tela do celular seja minúscula */
 }
 
 .icon-header {
@@ -109,8 +123,7 @@ button#btnLogin:active { transform: scale(0.96); }
 
 /* --- APP UI (TOP BAR) --- */
 .top-bar {
-    position: absolute;
-    top: 0;
+    position: relative; /* Mudado de absolute para empurrar o resto pra baixo */
     width: 100%;
     padding: 20px;
     box-sizing: border-box;
@@ -136,7 +149,7 @@ button#btnLogin:active { transform: scale(0.96); }
     justify-content: center;
 }
 
-/* --- LAYOUT DO HUB (NOVO) --- */
+/* --- LAYOUT DO HUB --- */
 .hub-grid {
     display: flex;
     flex-wrap: wrap;
@@ -146,12 +159,14 @@ button#btnLogin:active { transform: scale(0.96); }
     max-width: 800px;
     padding: 0 20px;
     box-sizing: border-box;
-    margin-top: 40px;
+    margin-top: 10px;
+    flex-grow: 1; /* Ocupa o espaço disponível empurrando o footer */
 }
 
 .device-card {
     background: var(--card-bg);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
     padding: 25px 20px;
@@ -234,10 +249,11 @@ button#btnLogin:active { transform: scale(0.96); }
 
 /* Footer / Admin */
 .footer-options {
-    position: absolute;
-    bottom: 30px;
+    position: relative; /* Mudado de absolute para não atropelar os cartões */
     width: 100%;
     text-align: center;
+    margin-top: 40px;
+    padding-bottom: 20px;
 }
 
 summary {
