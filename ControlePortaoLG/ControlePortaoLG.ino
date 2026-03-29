@@ -26,11 +26,23 @@ bool estadoSensorAnterior = false;
 // --- FUNÇÃO DE STATUS ---
 void publicarEstadoInicial() {
   bool sensorAtual = digitalRead(PINO_SENSOR);
+  
+  // Puxa a referência do seu portão no SinricPro
+  SinricProGarageDoor &myGarageDoor = SinricPro[GARAGEDOOR_ID]; 
+
   if (sensorAtual == HIGH) {
      client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_ABERTO", true);
+     
+     // Avisa o Google Home que o portão ABRIR (false = aberto no SinricPro)
+     myGarageDoor.sendDoorStateEvent(false); 
+     
      Serial.println("[STATUS] Enviado: ABERTO");
   } else {
      client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_FECHADO", true);
+     
+     // Avisa o Google Home que o portão FECHOU (true = fechado no SinricPro)
+     myGarageDoor.sendDoorStateEvent(true); 
+     
      Serial.println("[STATUS] Enviado: FECHADO");
   }
 }
