@@ -11,7 +11,7 @@ const progressLabel = document.getElementById('progressLabel');
 // --- VARIÁVEIS DE ESTADO PORTÃO ---
 let estadoAtual = "DESCONHECIDO"; 
 let timerMovimento = null;
-const TEMPO_CICLO = 15000; 
+const TEMPO_CICLO = 15000;  
 let ultimaDirecao = "FECHANDO"; 
 let emProcessoDeUpdate = false; 
 

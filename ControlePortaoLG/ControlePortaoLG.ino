@@ -2,6 +2,8 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <HTTPUpdate.h> 
+#include <SinricPro.h>
+#include <SinricProGarageDoor.h>
 #include "secrets.h" 
 
 // --- CONFIGURAÇÃO OTA WEB ---
@@ -18,18 +20,16 @@ int tentativasFalhas = 0;
 
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
-bool estadoSensorAnterior = false; // false = Fechado (LOW), true = Aberto (HIGH)
+bool estadoSensorAnterior = false;
+// false = Fechado (LOW), true = Aberto (HIGH)
 
 // --- FUNÇÃO DE STATUS ---
 void publicarEstadoInicial() {
-  // Lógica: INPUT_PULLUP -> HIGH = Aberto (Sem ímã), LOW = Fechado (Com ímã)
   bool sensorAtual = digitalRead(PINO_SENSOR);
-
   if (sensorAtual == HIGH) {
      client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_ABERTO", true);
      Serial.println("[STATUS] Enviado: ABERTO");
   } else {
-     // REMOVIDO O FILTRO DE TEMPO! AGORA É INSTANTÂNEO.
      client.publish(MQTT_TOPIC_STATUS, "ESTADO_REAL_FECHADO", true);
      Serial.println("[STATUS] Enviado: FECHADO");
   }
@@ -39,7 +39,6 @@ void publicarEstadoInicial() {
 void realizarUpdateFirmware() {
   Serial.println("\n[UPDATE] Iniciando atualização OTA...");
   client.publish(MQTT_TOPIC_STATUS, "STATUS_ATUALIZANDO_SISTEMA", true);
-  
   WiFiClientSecure clientOTA;
   clientOTA.setInsecure();
   t_httpUpdate_return ret = httpUpdate.update(clientOTA, URL_FIRMWARE);
@@ -58,10 +57,34 @@ void realizarUpdateFirmware() {
   }
 }
 
+// --- CONTROLE FÍSICO DO RELÉ ---
+void acionarReleSeguro() {
+  Serial.println("\n>>> ACIONANDO PORTÃO <<<");
+  pinMode(PINO_RELE_REAL, OUTPUT);
+  digitalWrite(PINO_RELE_REAL, HIGH); delay(50); 
+  digitalWrite(PINO_RELE_REAL, LOW); delay(500); // Pulso de meio segundo
+  digitalWrite(PINO_RELE_REAL, HIGH); delay(50); 
+  pinMode(PINO_RELE_REAL, INPUT);
+  Serial.println(">>> FIM DO PULSO <<<\n");
+}
+
+// --- CALLBACK DO GOOGLE HOME (SINRICPRO) ---
+bool onGarageDoorState(const String &deviceId, bool &doorState) {
+  Serial.printf("[SinricPro] Comando de voz recebido! Estado solicitado: %s\n", doorState ? "Abrir" : "Fechar");
+  
+  // Feedback visual para o seu painel web caso precise
+  if (digitalRead(PINO_SENSOR) == LOW) client.publish(MQTT_TOPIC_STATUS, "STATUS_ABRINDO", true);
+  else client.publish(MQTT_TOPIC_STATUS, "STATUS_FECHANDO", true);
+  
+  acionarReleSeguro(); 
+  
+  return true; // Retorna true confirmando para o Google Assistente
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- INICIANDO SISTEMA SMART GATE V3.0 (INSTANT) ---");
+  Serial.println("\n\n--- INICIANDO SISTEMA SMART GATE V3.0 (INSTANT + GOOGLE HOME) ---");
 
   pinMode(PINO_RELE_REAL, INPUT);
   pinMode(PINO_FANTASMA, OUTPUT); digitalWrite(PINO_FANTASMA, LOW);
@@ -69,9 +92,19 @@ void setup() {
 
   setup_wifi();
 
+  // Configuração MQTT Original
   espClient.setInsecure();
   client.setServer(MQTT_SERVER, MQTT_PORT);
   client.setCallback(callback);
+
+  // --- INICIALIZA SINRICPRO ---
+  SinricProGarageDoor &myGarageDoor = SinricPro[GARAGEDOOR_ID];
+  myGarageDoor.onDoorState(onGarageDoorState);
+  
+  SinricPro.onConnected([](){ Serial.println("[SinricPro] Conectado à nuvem do Google!"); });
+  SinricPro.onDisconnected([](){ Serial.println("[SinricPro] Desconectado da nuvem."); });
+  
+  SinricPro.begin(APP_KEY, APP_SECRET);
 }
 
 void setup_wifi() {
@@ -83,7 +116,6 @@ void setup_wifi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int tentativasWifi = 0;
-  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -98,16 +130,6 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
-void acionarReleSeguro() {
-  Serial.println("\n>>> ACIONANDO PORTÃO <<<");
-  pinMode(PINO_RELE_REAL, OUTPUT);
-  digitalWrite(PINO_RELE_REAL, HIGH); delay(50); 
-  digitalWrite(PINO_RELE_REAL, LOW); delay(500); // Pulso de meio segundo
-  digitalWrite(PINO_RELE_REAL, HIGH); delay(50); 
-  pinMode(PINO_RELE_REAL, INPUT);
-  Serial.println(">>> FIM DO PULSO <<<\n");
-}
-
 void callback(char* topic, byte* payload, unsigned int length) {
   String mensagem = "";
   for (int i = 0; i < length; i++) mensagem += (char)payload[i];
@@ -115,19 +137,15 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("[MQTT] Mensagem: ");
   Serial.println(mensagem);
   
-  // --- LÓGICA DE COMANDOS ---
   if (mensagem.startsWith("ABRIR_PORTAO_AGORA")) {
-    // Envia feedback visual imediato de que recebeu o comando
     if (digitalRead(PINO_SENSOR) == LOW) client.publish(MQTT_TOPIC_STATUS, "STATUS_ABRINDO", true);
     else client.publish(MQTT_TOPIC_STATUS, "STATUS_FECHANDO", true);
     acionarReleSeguro();
   }
-  
   else if (mensagem.startsWith("CHECAR_STATUS")) {
     Serial.println("[CMD] Check-up solicitado.");
     publicarEstadoInicial();
   }
-  
   else if (mensagem.startsWith("ATUALIZAR_FIRMWARE")) {
     realizarUpdateFirmware();
   }
@@ -137,7 +155,6 @@ void reconnect() {
   if (!client.connected()) {
     Serial.print("[MQTT] Reconectando...");
     String clientId = "ESP32_" + String(random(0xffff), HEX);
-    
     if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
       Serial.println(" OK!");
       tentativasFalhas = 0;
@@ -159,19 +176,17 @@ void loop() {
   if (!client.connected()) reconnect();
   client.loop();
   
+  // Mantém o SinricPro vivo e escutando o Google Assistente
+  SinricPro.handle();
+  
   // Leitura do Sensor
   int leituraAtual = digitalRead(PINO_SENSOR);
   bool estadoLidoBool = (leituraAtual == HIGH);
   
-  // Se mudou o estado físico...
   if (estadoLidoBool != estadoSensorAnterior) {
-    // Delay pequeno (200ms) só pra garantir que o ímã encostou mesmo
-    // Isso evita que o sensor mande 50 mensagens se o portão tremer ao bater
-    delay(200); 
-    
-    // Confirma leitura após o delay
+    delay(200);
     if (digitalRead(PINO_SENSOR) == leituraAtual) {
-      publicarEstadoInicial(); // Envia IMEDIATAMENTE
+      publicarEstadoInicial();
       estadoSensorAnterior = estadoLidoBool;
     }
   }

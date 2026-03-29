@@ -9,7 +9,7 @@
     --success: #10b981;
     --warning: #f59e0b;
 }
-
+ 
 body {
     background-color: var(--bg-color);
     background-image: radial-gradient(circle at top, #1a1d29, #0f1115);
