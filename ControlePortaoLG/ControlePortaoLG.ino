@@ -84,8 +84,8 @@ void acionarReleSeguro() {
 bool onGarageDoorState(const String &deviceId, bool &doorState) {
   Serial.printf("[SinricPro] Comando de voz recebido! Estado solicitado: %s\n", doorState ? "Abrir" : "Fechar");
   
-  // MÁGICA AQUI: O ESP32 "finge" um envio de comando para o Node.js registrar a origem!
-  client.publish(MQTT_TOPIC_COMMAND, "ABRIR_PORTAO_AGORA|Google Home|Comando de Voz ou App");
+  // MÁGICA AQUI: Envia um comando de "log" para o Node.js que não aciona o relé em loop
+  client.publish(MQTT_TOPIC_COMMAND, "REGISTRAR_ORIGEM|Google Home|Comando por Voz");
   
   // Feedback visual para o seu painel web caso precise
   if (digitalRead(PINO_SENSOR) == LOW) client.publish(MQTT_TOPIC_STATUS, "STATUS_ABRINDO", true);
@@ -93,9 +93,8 @@ bool onGarageDoorState(const String &deviceId, bool &doorState) {
   
   acionarReleSeguro(); 
   
-  return true; // Retorna true confirmando para o Google Assistente
+  return true; 
 }
-
 void setup() {
   Serial.begin(115200);
   delay(1000);
