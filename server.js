@@ -79,8 +79,10 @@ client.on('message', (topic, message) => {
     }
     else if (topic === TOPIC_COMMAND) {
         const partes = msg.split('|');
-        if (partes[0] === "ABRIR_PORTAO_AGORA") {
-            ultimoComandoOrigem = `${partes[1]} (${partes[2]})`;
+        // Agora ele aceita tanto o comando de abrir quanto apenas o registro de log
+        if (partes[0] === "ABRIR_PORTAO_AGORA" || partes[0] === "REGISTRAR_ORIGEM") {
+            // Formatação exata que você pediu: Google Home | Comando por Voz
+            ultimoComandoOrigem = `${partes[1]} | ${partes[2]}`;
             if (timeoutComando) clearTimeout(timeoutComando);
             timeoutComando = setTimeout(() => { ultimoComandoOrigem = null; }, 40000);
         }
