@@ -95,7 +95,65 @@ function fazerLogout() {
 }
 
 // --- CONTROLES PORTÃO ---
+
+function checarModoNoturno() {
+    const horaAtual = new Date().getHours();
+    // Retorna true se for maior ou igual a 23h OU menor que 06h
+    return horaAtual >= 23 || horaAtual < 6;
+}
+
 async function abrirPortao() {
+    // Se for de madrugada, intercepta o clique e abre o modal
+    if (checarModoNoturno()) {
+        document.getElementById('night-modal').classList.remove('hidden');
+        if(navigator.vibrate) navigator.vibrate([50, 50, 50]); // Vibração de alerta
+        return; 
+    }
+    
+    // Se for de dia, executa normalmente
+    executarAberturaPortao();
+}
+
+async function confirmarNightMode() {
+    const passInput = document.getElementById('nightPassword').value;
+    const btn = document.getElementById('btnConfirmNight');
+
+    if (!passInput) return showToast("Digite a senha!", "error");
+
+    btn.innerHTML = `<i class="ph ph-spinner ph-spin"></i> Verificando...`; 
+    btn.disabled = true;
+
+    try {
+        // Agora chamamos a nova rota dedicada à senha noturna
+        const res = await fetch('/api/verify-night', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: passInput })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            fecharNightModal();
+            showToast("Verificação concluída. Abrindo...", "success");
+            executarAberturaPortao();
+        } else {
+            showToast("Senha Incorreta!", "error");
+            if(navigator.vibrate) navigator.vibrate(200);
+        }
+    } catch (e) { 
+        showToast("Erro de conexão", "error");
+    }
+
+    btn.innerHTML = `CONFIRMAR <i class="ph ph-check-circle"></i>`; 
+    btn.disabled = false;
+    document.getElementById('nightPassword').value = ''; 
+}
+
+function fecharNightModal() {
+    document.getElementById('night-modal').classList.add('hidden');
+    document.getElementById('nightPassword').value = '';
+}
+
+async function executarAberturaPortao() {
     btnOpen.classList.add('active-power');
     if(navigator.vibrate) navigator.vibrate(50);
     setTimeout(() => btnOpen.classList.remove('active-power'), 300);
@@ -191,7 +249,6 @@ function pararContagemBomba() {
     document.getElementById('bombaIcon').className = "ph ph-power";
     document.getElementById('bombaIcon').style.color = "#555";
 }
-
 
 async function solicitarUpdate(dispositivo) {
     let nomeDispositivo = dispositivo === 'portao' ? 'Portão' : 'Bomba';

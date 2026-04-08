@@ -16,6 +16,7 @@ const MQTT_USER = process.env.MQTT_USER;
 const MQTT_PASS = process.env.MQTT_PASS;
 const APP_PASSWORD = process.env.APP_PASSWORD; 
 const NTFY_TOPIC = process.env.NTFY_TOPIC; 
+const NIGHT_PASSWORD = process.env.NIGHT_PASSWORD; // NOVA VARIÁVEL PARA A MADRUGADA
 
 // --- TÓPICOS SEPARADOS E PADRONIZADOS ---
 const TOPIC_STATUS_PORTAO = "projeto_LG/casa/portao/status";
@@ -79,9 +80,7 @@ client.on('message', (topic, message) => {
     }
     else if (topic === TOPIC_COMMAND) {
         const partes = msg.split('|');
-        // Agora ele aceita tanto o comando de abrir quanto apenas o registro de log
         if (partes[0] === "ABRIR_PORTAO_AGORA" || partes[0] === "REGISTRAR_ORIGEM") {
-            // Formatação exata que você pediu: Google Home | Comando por Voz
             ultimoComandoOrigem = `${partes[1]} | ${partes[2]}`;
             if (timeoutComando) clearTimeout(timeoutComando);
             timeoutComando = setTimeout(() => { ultimoComandoOrigem = null; }, 40000);
@@ -145,6 +144,22 @@ app.post('/api/login', (req, res) => {
         res.json({ success: true, token });
     } else {
         res.status(401).json({ success: false, error: "Senha Incorreta" });
+    }
+});
+
+// NOVA ROTA: Validação exclusiva do Modo Noturno
+app.post('/api/verify-night', (req, res) => {
+    const { password } = req.body;
+    // Se a variável NIGHT_PASSWORD não estiver configurada no .env, avisa no console
+    if (!NIGHT_PASSWORD) {
+        console.warn("⚠️ NIGHT_PASSWORD não definida no .env!");
+        return res.status(500).json({ success: false, error: "Erro de configuração no servidor." });
+    }
+
+    if (password === NIGHT_PASSWORD) {
+        res.json({ success: true });
+    } else {
+        res.status(401).json({ success: false, error: "Senha Noturna Incorreta" });
     }
 });
 

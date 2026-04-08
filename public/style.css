@@ -16,7 +16,6 @@ body {
     color: var(--text-main);
     font-family: 'Inter', sans-serif;
     margin: 0;
-    /* Substituído o height fixo e overflow hidden por min-height fluido */
     min-height: 100vh;
     display: flex;
     justify-content: center;
@@ -25,7 +24,7 @@ body {
 
 .screen {
     width: 100%;
-    min-height: 100vh; /* Garante que ocupa pelo menos a tela toda */
+    min-height: 100vh; 
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -33,16 +32,16 @@ body {
     top: 0;
     left: 0;
     transition: opacity 0.4s ease;
-    overflow-y: auto; /* Permite rolar para baixo se não couber na tela */
+    overflow-y: auto; 
     box-sizing: border-box;
 }
 
 #login-screen {
-    justify-content: center; /* Mantém o login bem no meio da tela */
+    justify-content: center; 
 }
 
 #app-screen {
-    justify-content: flex-start; /* Faz o app começar do topo e descer naturalmente */
+    justify-content: flex-start; 
     padding-bottom: 40px; 
 }
 
@@ -62,7 +61,7 @@ body {
     max-width: 320px;
     text-align: center;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    margin: 20px 0; /* Espaço extra caso a tela do celular seja minúscula */
+    margin: 20px 0; 
 }
 
 .icon-header {
@@ -123,7 +122,7 @@ button#btnLogin:active { transform: scale(0.96); }
 
 /* --- APP UI (TOP BAR) --- */
 .top-bar {
-    position: relative; /* Mudado de absolute para empurrar o resto pra baixo */
+    position: relative; 
     width: 100%;
     padding: 20px;
     box-sizing: border-box;
@@ -160,7 +159,7 @@ button#btnLogin:active { transform: scale(0.96); }
     padding: 0 20px;
     box-sizing: border-box;
     margin-top: 10px;
-    flex-grow: 1; /* Ocupa o espaço disponível empurrando o footer */
+    flex-grow: 1; 
 }
 
 .device-card {
@@ -189,7 +188,6 @@ button#btnLogin:active { transform: scale(0.96); }
     font-weight: 600;
 }
 
-/* Rings de Status nos cartões */
 .status-display.small {
     text-align: center;
     margin-bottom: 10px;
@@ -212,7 +210,6 @@ button#btnLogin:active { transform: scale(0.96); }
 
 .status-display.small p { margin: 0; font-weight: 600; font-size: 1rem; }
 
-/* Botões Modernos dos Cartões */
 .btn-device {
     width: 100%;
     padding: 16px;
@@ -231,7 +228,6 @@ button#btnLogin:active { transform: scale(0.96); }
 
 .btn-device:active { transform: scale(0.96); }
 
-/* Adaptação do Botão do Portão */
 #btnOpen.btn-gate {
     background: var(--primary);
     box-shadow: 0 4px 15px var(--primary-glow);
@@ -242,14 +238,12 @@ button#btnLogin:active { transform: scale(0.96); }
     transform: scale(0.96);
 }
 
-/* Controles da Bomba */
 .bomba-controls { display: flex; gap: 10px; width: 100%; }
 .btn-on { background: var(--success); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
 .btn-off { background: var(--danger); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
 
-/* Footer / Admin */
 .footer-options {
-    position: relative; /* Mudado de absolute para não atropelar os cartões */
+    position: relative; 
     width: 100%;
     text-align: center;
     margin-top: 40px;
@@ -289,7 +283,6 @@ summary {
 
 .badge { background: #333; padding: 2px 8px; border-radius: 4px; color: white; font-size: 0.75rem; }
 
-/* Botoes de Update Independentes */
 .update-buttons {
     display: flex;
     flex-direction: column;
@@ -318,7 +311,6 @@ summary {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Toasts */
 #toast-container {
     position: fixed;
     top: 20px;
@@ -340,7 +332,6 @@ summary {
     border: 1px solid #333;
 }
 
-/* Barra de Progresso */
 #progressContainer { margin-top: 15px; width: 100%; }
 .progress-label { font-size: 0.8rem; color: #00d2ff; margin-bottom: 5px; text-align: left; animation: pulseText 1.5s infinite; }
 .progress-track { width: 100%; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative; }
@@ -363,3 +354,10 @@ summary {
     50% { opacity: 1; }
     100% { opacity: 0.6; }
 }
+
+/* --- NIGHT MODE --- */
+#btnConfirmNight {
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+    transition: transform 0.2s;
+}
+#btnConfirmNight:active { transform: scale(0.96); }
