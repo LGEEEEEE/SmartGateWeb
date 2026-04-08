@@ -10,7 +10,7 @@
 #define URL_FIRMWARE "https://raw.githubusercontent.com/LGEEEEEE/SmartGateWeb/main/ControlePortaoLG/build/esp32.esp32.esp32doit-devkit-v1/ControlePortaoLG.ino.bin"
 
 // --- HARDWARE ---
-const int PINO_RELE_REAL = 18;
+const int PINO_RELE_REAL = 22;
 const int PINO_FANTASMA = 23;     
 const int PINO_SENSOR = 4;        
 
