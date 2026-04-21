@@ -15,7 +15,7 @@ const int PINO_FANTASMA = 23;
 const int PINO_SENSOR = 4;        
 
 // --- CONFIGURAÇÃO DE REINÍCIO ---
-const int MAX_TENTATIVAS_MQTT = 15;
+const int MAX_TENTATIVAS_MQTT = 3;
 int tentativasFalhas = 0;           
 
 WiFiClientSecure espClient;
