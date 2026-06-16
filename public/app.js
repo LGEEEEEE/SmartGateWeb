@@ -97,6 +97,7 @@ function fazerLogout() {
 // --- CONTROLES PORTÃO ---
 
 function checarModoNoturno() {
+
     const horaAtual = new Date().getHours();
     // Retorna true se for maior ou igual a 23h OU menor que 06h
     return horaAtual >= 23 || horaAtual < 6;
