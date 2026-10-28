@@ -1,14 +1,15 @@
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include <HTTPUpdate.h> 
+#include <ESP8266httpUpdate.h> 
 #include "secrets.h" 
 
-#define URL_FIRMWARE "https://raw.githubusercontent.com/LGEEEEEE/SmartGateWeb/main/ControleBomba/build/esp32.esp32.esp32doit-devkit-v1/ControleBomba.ino.bin"
+#define URL_FIRMWARE "https://raw.githubusercontent.com/LGEEEEEE/SmartGateWeb/main/ControleBomba/build/esp8266.esp8266.generic/ControleBomba.ino.bin"
 #define MQTT_TOPIC_COMMAND_BOMBA "projeto_LG/casa/bomba/cmd"
 #define MQTT_TOPIC_STATUS_BOMBA "projeto_LG/casa/bomba/status"
 
-const int PINO_RELE_BOMBA = 18; 
+// O módulo relé padrão do ESP-01S utiliza o pino 0
+const int PINO_RELE_BOMBA = 0; 
 
 // --- LÓGICA DE MÁQUINA DE ESTADOS (BOMBA INTERCALADA) ---
 enum EstadoBomba { PARADA, LIGADA, ESPERA };
@@ -99,7 +100,9 @@ void realizarUpdateFirmware() {
   
   WiFiClientSecure clientOTA;
   clientOTA.setInsecure();
-  t_httpUpdate_return ret = httpUpdate.update(clientOTA, URL_FIRMWARE);
+  
+  // No ESP8266 utiliza-se ESPhttpUpdate em vez de httpUpdate
+  t_httpUpdate_return ret = ESPhttpUpdate.update(clientOTA, URL_FIRMWARE);
 
   switch (ret) {
     case HTTP_UPDATE_FAILED:
@@ -113,7 +116,7 @@ void realizarUpdateFirmware() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- INICIANDO SMART PUMP V3.0 (INTERCALADO) ---");
+  Serial.println("\n\n--- INICIANDO SMART PUMP V3.0 (INTERCALADO - ESP8266) ---");
 
   pinMode(PINO_RELE_BOMBA, INPUT);
   setup_wifi();
@@ -125,13 +128,26 @@ void setup() {
 
 void setup_wifi() {
   delay(10);
+  Serial.println();
+  Serial.print("[WIFI] Conectando a rede: ");
+  Serial.println(WIFI_SSID);
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int tentativasWifi = 0;
+  
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500); tentativasWifi++;
-    if (tentativasWifi > 60) ESP.restart();
+    delay(500);
+    Serial.print(".");
+    tentativasWifi++;
+    if (tentativasWifi > 60) {
+      Serial.println("\n[ERRO] Falha ao conectar no Wi-Fi. Reiniciando ESP...");
+      ESP.restart();
+    }
   }
+  Serial.println("\n[WIFI] Conectado com Sucesso!");
+  Serial.print("[WIFI] IP: ");
+  Serial.println(WiFi.localIP());
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -140,7 +156,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   
   Serial.print("[MQTT] Mensagem: "); Serial.println(mensagem);
 
-  // Comando chega como: LIGAR_BOMBA|60|120  (60 min ligado, 120 min descanso)
   if (mensagem.startsWith("LIGAR_BOMBA")) {
     int tLigado = 15;
     int tDesligado = 0;
@@ -174,7 +189,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void reconnect() {
   if (!client.connected()) {
-    String clientId = "ESP32_BOMBA_" + String(random(0xffff), HEX);
+    String clientId = "ESP8266_BOMBA_" + String(random(0xffff), HEX);
     if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
       tentativasFalhas = 0;
       client.subscribe(MQTT_TOPIC_COMMAND_BOMBA);
@@ -198,7 +213,7 @@ void loop() {
         Serial.println("[TIMER] Tempo esgotado. Entrando em modo ESPERA para resfriamento.");
         estadoAtual = ESPERA;
         tempoInicioEstado = millis();
-        acionarReleFisico(false); // Corta a energia
+        acionarReleFisico(false); 
         publicarEstado();
       } else {
         Serial.println("[TIMER] Fim do ciclo normal.");
@@ -211,7 +226,7 @@ void loop() {
       Serial.println("[TIMER] Descanso concluído. Religando a bomba automaticamente!");
       estadoAtual = LIGADA;
       tempoInicioEstado = millis();
-      acionarReleFisico(true); // Liga a energia novamente
+      acionarReleFisico(true); 
       publicarEstado();
     }
   }
