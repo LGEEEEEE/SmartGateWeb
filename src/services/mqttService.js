@@ -15,7 +15,7 @@ const initMqtt = () => {
         username: process.env.MQTT_USER, 
         password: process.env.MQTT_PASS,
         protocol: 'mqtts', 
-        rejectUnauthorized: false
+        rejectUnauthorized: true
     });
 
     client.on('connect', () => {

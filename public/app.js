@@ -18,7 +18,16 @@ let emProcessoDeUpdate = false;
 // --- VARIÁVEIS DE ESTADO BOMBA ---
 let bombaCountdownTimer = null;
 let tempoRestanteBomba = 0; 
-let tipoContagemAtual = "LIGADA"; // Pode ser "LIGADA" ou "ESPERA"
+let tipoContagemAtual = "LIGADA";
+
+// --- VARIÁVEIS DE ESTADO VÁLVULAS IRRIGAÇÃO ---
+const estadoValvulas = {
+    caixa: true,
+    lateral: true,
+    acerola: true,
+    palmeiras: true,
+    escadas: true
+};
 
 // --- INICIALIZAÇÃO ---
 const savedToken = localStorage.getItem('gate_token');
@@ -77,6 +86,7 @@ function mostrarApp() {
     loginScreen.classList.add('hidden');
     appScreen.classList.remove('hidden');
     conectarSSE();
+    verificarTravaSegurancaValvulas();
     
     fetch('/api/acionar', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
@@ -94,24 +104,77 @@ function fazerLogout() {
     location.reload();
 }
 
+// --- CONTROLES DA PLANTA DE IRRIGAÇÃO (VÁLVULAS) ---
+async function toggleValvula(id) {
+    if (navigator.vibrate) navigator.vibrate(40);
+
+    // Regra de segurança/interlock (Evita sobrepressão na bomba)
+    if (estadoValvulas[id] === true) { 
+        if (id === 'caixa' && estadoValvulas['lateral'] === false) {
+            showToast("Segurança: Válvula Lateral já está fechada!", "error");
+            return;
+        }
+        if (id === 'lateral' && estadoValvulas['caixa'] === false) {
+            showToast("Segurança: Válvula Caixa D'água já está fechada!", "error");
+            return;
+        }
+    }
+
+    estadoValvulas[id] = !estadoValvulas[id];
+    const estadoTexto = estadoValvulas[id] ? "Aberta" : "Fechada";
+    
+    atualizarUIValvula(id);
+    verificarTravaSegurancaValvulas();
+    showToast(`Válvula ${capitalize(id)}: ${estadoTexto}`, estadoValvulas[id] ? "success" : "info");
+
+    // Envia o comando para o Backend (Backend faz o relay via MQTT)
+    try {
+        await fetch('/api/acionar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
+            body: JSON.stringify({ 
+                dispositivo: "bomba", 
+                comando_customizado: `VALVULA_${id.toUpperCase()}_${estadoValvulas[id] ? 'ABRIR' : 'FECHAR'}` 
+            })
+        });
+    } catch (e) { console.log("Erro ao enviar estado da válvula ao servidor"); }
+}
+
+function atualizarUIValvula(id) {
+    const btn = document.getElementById(`btn${capitalize(id)}`);
+    const icon = document.getElementById(`icon${capitalize(id)}`);
+    if (!btn || !icon) return;
+
+    if (estadoValvulas[id]) {
+        btn.classList.remove('fechada');
+        icon.className = "ph ph-lock-open";
+    } else {
+        btn.classList.add('fechada');
+        icon.className = "ph ph-lock-key";
+    }
+}
+
+function verificarTravaSegurancaValvulas() {
+    const btnCaixa = document.getElementById('btnCaixa');
+    const btnLateral = document.getElementById('btnLateral');
+    if (!btnCaixa || !btnLateral) return;
+
+    btnLateral.disabled = !estadoValvulas.caixa;
+    btnCaixa.disabled = !estadoValvulas.lateral;
+}
+
 // --- CONTROLES PORTÃO ---
-
 function checarModoNoturno() {
-
     const horaAtual = new Date().getHours();
-    // Retorna true se for maior ou igual a 23h OU menor que 06h
     return horaAtual >= 23 || horaAtual < 6;
 }
 
 async function abrirPortao() {
-    // Se for de madrugada, intercepta o clique e abre o modal
     if (checarModoNoturno()) {
         document.getElementById('night-modal').classList.remove('hidden');
-        if(navigator.vibrate) navigator.vibrate([50, 50, 50]); // Vibração de alerta
+        if(navigator.vibrate) navigator.vibrate([50, 50, 50]);
         return; 
     }
-    
-    // Se for de dia, executa normalmente
     executarAberturaPortao();
 }
 
@@ -125,7 +188,6 @@ async function confirmarNightMode() {
     btn.disabled = true;
 
     try {
-        // Agora chamamos a nova rota dedicada à senha noturna
         const res = await fetch('/api/verify-night', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password: passInput })
@@ -154,6 +216,7 @@ function fecharNightModal() {
     document.getElementById('nightPassword').value = '';
 }
 
+// Na função executarAberturaPortao() no frontend:
 async function executarAberturaPortao() {
     btnOpen.classList.add('active-power');
     if(navigator.vibrate) navigator.vibrate(50);
@@ -165,25 +228,21 @@ async function executarAberturaPortao() {
         await fetch('/api/acionar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('gate_token') },
-            body: JSON.stringify({ dispositivo: "portao" })
+            // ENVIA A CONFIRMAÇÃO NOTURNA PARA O BACKEND NÃO BLOQUEAR
+            body: JSON.stringify({ dispositivo: "portao", nightVerified: true }) 
         });
     } catch (e) { showToast("Erro ao enviar comando", "error"); }
 }
 
-// --- CONTROLES DA BOMBA E CONTAGEM REGRESSIVA ---
+// --- CONTROLES BOMBA ---
 function toggleModoBomba() {
     const modo = document.querySelector('input[name="modoBomba"]:checked').value;
     const divDescanso = document.getElementById('divTempoDescanso');
-    if(modo === 'intercalado') {
-        divDescanso.style.display = 'block';
-    } else {
-        divDescanso.style.display = 'none';
-    }
+    divDescanso.style.display = (modo === 'intercalado') ? 'block' : 'none';
 }
 
 async function controlarBomba(comandoBase) {
     if(navigator.vibrate) navigator.vibrate(50);
-    
     let comandoFinal = comandoBase;
     
     if (comandoBase === "LIGAR_BOMBA") {
@@ -276,7 +335,7 @@ async function solicitarUpdate(dispositivo) {
     }
 }
 
-// --- LÓGICA DE MOVIMENTO COM INVERSÃO PORTÃO ---
+// --- LÓGICA DE MOVIMENTO PORTÃO ---
 function gerenciarLogicaClique() {
     if (estadoAtual === "ABRINDO" || estadoAtual === "FECHANDO") {
         ultimaDirecao = estadoAtual;
@@ -347,13 +406,19 @@ function reativarBotoesUpdate() {
     if (btnBomba) { btnBomba.innerHTML = `<i class="ph ph-drop"></i> Atualizar Bomba`; btnBomba.disabled = false; }
 }
 
+function capitalize(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 // --- SSE EVENTOS ---
 function conectarSSE() {
-    const evtSource = new EventSource('/events');
+
+    const token = localStorage.getItem('gate_token');
+    
+    const evtSource = new EventSource(`/events?token=${token}`);
     evtSource.onmessage = function(event) {
         const msg = event.data;
         
-        // STATUS DA BOMBA (LIGADA):
         if (msg.startsWith("BOMBA_LIGADA")) {
             let tempoAtivo = "15"; 
             let segundosRestantes = null;
@@ -367,15 +432,13 @@ function conectarSSE() {
             let segundosParaContar = segundosRestantes !== null ? segundosRestantes : parseInt(tempoAtivo) * 60;
             iniciarContagemBomba(segundosParaContar, "LIGADA");
             
-            document.getElementById('bombaStatusText').style.color = "#10b981"; // Verde
+            document.getElementById('bombaStatusText').style.color = "#10b981"; 
             document.getElementById('bombaIndicator').style.borderColor = "#10b981";
             document.getElementById('bombaIndicator').style.boxShadow = "0 0 20px rgba(16, 185, 129, 0.4)";
             document.getElementById('bombaIcon').className = "ph ph-drop";
             document.getElementById('bombaIcon').style.color = "#10b981";
             verificarFimUpdate();
         }
-        
-        // STATUS DA BOMBA (EM ESPERA / PAUSA PARA DESCANSAR):
         else if (msg.startsWith("BOMBA_ESPERA")) {
             let tempoPausa = "60"; 
             let segundosRestantes = null;
@@ -389,21 +452,17 @@ function conectarSSE() {
             let segundosParaContar = segundosRestantes !== null ? segundosRestantes : parseInt(tempoPausa) * 60;
             iniciarContagemBomba(segundosParaContar, "ESPERA");
             
-            document.getElementById('bombaStatusText').style.color = "#f59e0b"; // Amarelo
+            document.getElementById('bombaStatusText').style.color = "#f59e0b"; 
             document.getElementById('bombaIndicator').style.borderColor = "#f59e0b";
             document.getElementById('bombaIndicator').style.boxShadow = "0 0 20px rgba(245, 158, 11, 0.4)";
             document.getElementById('bombaIcon').className = "ph ph-timer";
             document.getElementById('bombaIcon').style.color = "#f59e0b";
             verificarFimUpdate();
         }
-        
-        // STATUS DA BOMBA (TOTALMENTE DESLIGADA):
         else if (msg === "BOMBA_DESLIGADA") {
             pararContagemBomba();
             verificarFimUpdate(); 
         }
-        
-        // STATUS REAL DO PORTÃO:
         else if(msg === "ESTADO_REAL_FECHADO") {
             if (timerMovimento) clearTimeout(timerMovimento);
             finalizarEstado("FECHADO");
@@ -414,8 +473,6 @@ function conectarSSE() {
             if (estadoAtual !== "PARADO") finalizarEstado("ABERTO");
             verificarFimUpdate();
         }
-        
-        // ATUALIZAÇÃO FIRMWARE:
         else if (msg === "PORTAO_STATUS_ATUALIZANDO_SISTEMA" || msg === "STATUS_ATUALIZANDO_BOMBA") {
              emProcessoDeUpdate = true;
              progressContainer.classList.remove('hidden');

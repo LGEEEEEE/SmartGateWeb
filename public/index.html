@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Gate Web</title>
+    <title>Smart Home Hub</title>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css"> 
@@ -12,6 +12,7 @@
 <body>
     <div id="toast-container"></div>
 
+    <!-- Tela de Login -->
     <div id="login-screen" class="screen">
         <div class="glass-card">
             <div class="icon-header"><i class="ph ph-shield-check"></i></div>
@@ -30,6 +31,7 @@
         </div>
     </div>
 
+    <!-- Tela Principal do Sistema -->
     <div id="app-screen" class="screen hidden">
         <div class="top-bar">
             <div class="user-info"><i class="ph ph-house-line"></i><span>Smart Home</span></div>
@@ -37,6 +39,8 @@
         </div>
 
         <div class="main-content hub-grid">
+            
+            <!-- Card 1: Portão -->
             <div class="device-card">
                 <h3><i class="ph ph-garage"></i> Portão</h3>
                 <div class="status-display small">
@@ -48,6 +52,7 @@
                 </button>
             </div>
 
+            <!-- Card 2: Bomba D'água Geral -->
             <div class="device-card">
                 <h3><i class="ph ph-drop"></i> Bomba D'água</h3>
                 <div class="status-display small">
@@ -66,9 +71,9 @@
                 <div style="width: 100%; margin-bottom: 10px;">
                     <label style="display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.85rem; text-align: left;">Tempo Ligada:</label>
                     <select id="tempoBomba" style="width: 100%; padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
-                        <option value="15 selected">💧 15 Minutos</option>
+                        <option value="15" selected>💧 15 Minutos</option>
                         <option value="30">💧 30 Minutos</option>
-                        <option value="60" >💧 1 Hora</option>
+                        <option value="60">💧 1 Hora</option>
                         <option value="120">💧 2 Horas</option>
                         <option value="180">💧 3 Horas</option>
                     </select>
@@ -93,13 +98,56 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Card 3 (NOVO): Planta Interativa de Irrigação -->
+            <div class="device-card card-mapa-irrigacao">
+                <h3><i class="ph ph-plant"></i> Válvulas da Irrigação</h3>
+                <p class="subtitle" style="margin-bottom: 15px; font-size: 0.8rem;">Toque nos cadeados para abrir ou fechar o fluxo</p>
+                
+                <div class="mapa-wrapper">
+                    <div class="mapa-container">
+                        
+                        <!-- Pé de Acerola (Canto Superior Esquerdo) -->
+                        <button class="btn-valvula" id="btnAcerola" style="top: 10%; left: 14%;" onclick="toggleValvula('acerola')">
+                            <i class="ph ph-lock-open" id="iconAcerola"></i>
+                            <span class="badge-valvula">Pé de Acerola</span>
+                        </button>
+
+                        <!-- Palmeiras (Canto Superior Direito) -->
+                        <button class="btn-valvula" id="btnPalmeiras" style="top: 13%; left: 74%;" onclick="toggleValvula('palmeiras')">
+                            <i class="ph ph-lock-open" id="iconPalmeiras"></i>
+                            <span class="badge-valvula">Palmeiras</span>
+                        </button>
+
+                        <!-- Escadas / Entrada (Centro Superior do Telhado) -->
+                        <button class="btn-valvula" id="btnEscadas" style="top: 44%; left: 50%;" onclick="toggleValvula('escadas')">
+                            <i class="ph ph-lock-open" id="iconEscadas"></i>
+                            <span class="badge-valvula">Escadas / Entrada</span>
+                        </button>
+
+                        <!-- Lateral (Lado Direito Superior da Entrada) -->
+                        <button class="btn-valvula" id="btnLateral" style="top: 61%; left: 89%;" onclick="toggleValvula('lateral')">
+                            <i class="ph ph-lock-open" id="iconLateral"></i>
+                            <span class="badge-valvula">Lateral</span>
+                        </button>
+
+                        <!-- Caixa D'água (Lado Direito Inferior) -->
+                        <button class="btn-valvula" id="btnCaixa" style="top: 72%; left: 89%;" onclick="toggleValvula('caixa')">
+                            <i class="ph ph-lock-open" id="iconCaixa"></i>
+                            <span class="badge-valvula">Caixa D'água</span>
+                        </button>
+
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <div class="footer-options">
             <details>
                 <summary><i class="ph ph-gear"></i> Configurações</summary>
                 <div class="admin-box">
-                    <div class="info-row"><span>Versão</span><span class="badge">v3.3 (Intercalado)</span></div>
+                    <div class="info-row"><span>Versão</span><span class="badge">v3.4 (Irrigação Mapa)</span></div>
                     
                     <div class="update-buttons">
                         <button onclick="solicitarUpdate('portao')" id="btnUpdatePortao" class="btn-update">
@@ -125,6 +173,7 @@
         </div>
     </div>
 
+    <!-- Modal Noturno -->
     <div id="night-modal" class="screen hidden" style="background: rgba(0,0,0,0.8); z-index: 100; justify-content: center;">
         <div class="glass-card" style="position: relative;">
             <button onclick="fecharNightModal()" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;"><i class="ph ph-x"></i></button>

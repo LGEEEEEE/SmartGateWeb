@@ -2,7 +2,8 @@
 const { publishCommand } = require('../services/mqttService');
 
 const acionar = (req, res) => {
-    const usuarioNome = req.user; 
+    // Atenção: agora pegamos o nome de req.user.user porque mudamos a estrutura da sessão
+    const usuarioNome = req.user || "Usuário"; 
     const userAgent = req.headers['user-agent'] || "";
     let device = "PC";
     if (userAgent.includes("Android")) device = "Android";
@@ -10,6 +11,16 @@ const acionar = (req, res) => {
 
     const dispositivo = req.body.dispositivo || "portao"; 
     const acao = req.body.comando_customizado || "ABRIR_PORTAO_AGORA";
+
+    // --- NOVA REGRA NOTURNA EMBUTIDA AQUI ---
+    const horaAtual = new Date().getHours();
+    const isMadrugada = horaAtual >= 23 || horaAtual < 6;
+
+    // Bloqueia se for portão, for madrugada, não for um check de status, e não tiver o token noturno
+    if (dispositivo === "portao" && isMadrugada && acao !== "CHECAR_STATUS" && !req.body.nightVerified) {
+        return res.status(403).json({ error: "Abertura noturna requer confirmação de senha noturna." });
+    }
+    // ----------------------------------------
 
     if (dispositivo === "bomba") {
         publishCommand("bomba", acao);

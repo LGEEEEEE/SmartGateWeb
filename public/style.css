@@ -9,7 +9,7 @@
     --success: #10b981;
     --warning: #f59e0b;
 }
- 
+
 body {
     background-color: var(--bg-color);
     background-image: radial-gradient(circle at top, #1a1d29, #0f1115);
@@ -20,6 +20,8 @@ body {
     display: flex;
     justify-content: center;
     overflow-x: hidden; 
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .screen {
@@ -36,18 +38,9 @@ body {
     box-sizing: border-box;
 }
 
-#login-screen {
-    justify-content: center; 
-}
-
-#app-screen {
-    justify-content: flex-start; 
-    padding-bottom: 40px; 
-}
-
-.hidden {
-    display: none !important;
-}
+#login-screen { justify-content: center; }
+#app-screen { justify-content: flex-start; padding-bottom: 40px; }
+.hidden { display: none !important; }
 
 /* --- LOGIN CARD --- */
 .glass-card {
@@ -64,23 +57,12 @@ body {
     margin: 20px 0; 
 }
 
-.icon-header {
-    font-size: 3rem;
-    color: var(--primary);
-    margin-bottom: 10px;
-}
-
+.icon-header { font-size: 3rem; color: var(--primary); margin-bottom: 10px; }
 h1 { font-size: 1.5rem; margin: 10px 0 5px; font-weight: 600; }
 .subtitle { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 30px; }
 
 .input-group { position: relative; margin-bottom: 15px; }
-.input-group i {
-    position: absolute;
-    left: 15px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-muted);
-}
+.input-group i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
 
 input {
     width: 100%;
@@ -115,12 +97,10 @@ button#btnLogin {
     box-shadow: 0 4px 15px var(--primary-glow);
     transition: transform 0.2s;
 }
-
 button#btnLogin:active { transform: scale(0.96); }
-
 .error-msg { color: var(--danger); font-size: 0.85rem; height: 20px; margin-top: 10px; }
 
-/* --- APP UI (TOP BAR) --- */
+/* --- APP UI & TOP BAR --- */
 .top-bar {
     position: relative; 
     width: 100%;
@@ -133,7 +113,6 @@ button#btnLogin:active { transform: scale(0.96); }
 }
 
 .user-info { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.1rem; }
-
 .btn-icon {
     background: rgba(255, 255, 255, 0.1);
     border: none;
@@ -155,8 +134,8 @@ button#btnLogin:active { transform: scale(0.96); }
     gap: 20px;
     justify-content: center;
     width: 100%;
-    max-width: 800px;
-    padding: 0 20px;
+    max-width: 900px;
+    padding: 0 15px;
     box-sizing: border-box;
     margin-top: 10px;
     flex-grow: 1; 
@@ -168,19 +147,19 @@ button#btnLogin:active { transform: scale(0.96); }
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
-    padding: 25px 20px;
+    padding: 22px 18px;
     width: 100%;
-    max-width: 320px;
+    max-width: 330px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 15px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    box-sizing: border-box;
 }
 
 .device-card h3 {
     margin: 0 0 10px 0;
-    font-size: 1.3rem;
+    font-size: 1.25rem;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -188,11 +167,82 @@ button#btnLogin:active { transform: scale(0.96); }
     font-weight: 600;
 }
 
-.status-display.small {
-    text-align: center;
-    margin-bottom: 10px;
+/* --- ESTILOS ESPECÍFICOS DO MAPA DA IRRIGAÇÃO --- */
+.card-mapa-irrigacao {
+    max-width: 360px; /* Ajuste ergonômico em smartphones */
 }
 
+.mapa-wrapper {
+    width: 100%;
+    margin: 0 auto;
+}
+
+.mapa-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 274 / 596; /* Mantém proporção idêntica da foto */
+    background-color: #1e222d;
+    background-image: url('foto-satelite-casa.png'); /* Sua imagem satellite atualizada */
+    background-size: cover;
+    background-position: center;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+    overflow: hidden;
+}
+
+/* Botões de Válvula no Mapa */
+.btn-valvula {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: #10b981; /* Verde = Aberto */
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 1.1rem;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+    transition: all 0.2s ease-in-out;
+    z-index: 10;
+    touch-action: manipulation;
+}
+
+.btn-valvula:active {
+    transform: translate(-50%, -50%) scale(0.9);
+}
+
+.badge-valvula {
+    position: absolute;
+    bottom: -20px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    white-space: nowrap;
+    background-color: rgba(15, 23, 42, 0.92);
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+.btn-valvula.fechada {
+    background: #ef4444; /* Vermelho = Fechado */
+}
+
+.btn-valvula:disabled {
+    background: #64748b !important;
+    cursor: not-allowed;
+    border-color: #94a3b8;
+    opacity: 0.7;
+}
+
+/* Restante dos controles */
+.status-display.small { text-align: center; margin-bottom: 10px; }
 .status-ring {
     width: 70px;
     height: 70px;
@@ -227,28 +277,14 @@ button#btnLogin:active { transform: scale(0.96); }
 }
 
 .btn-device:active { transform: scale(0.96); }
-
-#btnOpen.btn-gate {
-    background: var(--primary);
-    box-shadow: 0 4px 15px var(--primary-glow);
-}
-
-#btnOpen.active-power {
-    filter: brightness(1.2);
-    transform: scale(0.96);
-}
+#btnOpen.btn-gate { background: var(--primary); box-shadow: 0 4px 15px var(--primary-glow); }
+#btnOpen.active-power { filter: brightness(1.2); transform: scale(0.96); }
 
 .bomba-controls { display: flex; gap: 10px; width: 100%; }
 .btn-on { background: var(--success); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
 .btn-off { background: var(--danger); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
 
-.footer-options {
-    position: relative; 
-    width: 100%;
-    text-align: center;
-    margin-top: 40px;
-    padding-bottom: 20px;
-}
+.footer-options { position: relative; width: 100%; text-align: center; margin-top: 40px; padding-bottom: 20px; }
 
 summary {
     list-style: none;
@@ -273,23 +309,10 @@ summary {
     animation: slideUp 0.3s;
 }
 
-.info-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 15px;
-    font-size: 0.9rem;
-    color: #888;
-}
-
+.info-row { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 0.9rem; color: #888; }
 .badge { background: #333; padding: 2px 8px; border-radius: 4px; color: white; font-size: 0.75rem; }
 
-.update-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 15px;
-}
-
+.update-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
 .btn-update {
     width: 100%;
     padding: 12px;
@@ -311,14 +334,7 @@ summary {
     to { opacity: 1; transform: translateY(0); }
 }
 
-#toast-container {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 100;
-}
-
+#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100; }
 .toast {
     background: #1e222d;
     color: white;
@@ -355,9 +371,5 @@ summary {
     100% { opacity: 0.6; }
 }
 
-/* --- NIGHT MODE --- */
-#btnConfirmNight {
-    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
-    transition: transform 0.2s;
-}
+#btnConfirmNight { box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3); transition: transform 0.2s; }
 #btnConfirmNight:active { transform: scale(0.96); }
